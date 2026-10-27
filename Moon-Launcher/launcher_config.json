@@ -1,0 +1,14 @@
+{
+  "ram_max_gb": 8,
+  "ram_min_gb": 2,
+  "username": "Epithap",
+  "width": 1280,
+  "height": 720,
+  "fullscreen": false,
+  "java_path": "E:\\TLauncher\\runtime\\java-runtime-gamma\\windows\\java-runtime-gamma\\bin\\javaw.exe",
+  "version_name": "Cursed Walking",
+  "jvm_g1gc_preset": true,
+  "discord_rpc": true,
+  "discord_client_id": "450485984333660181",
+  "discord_small_image": "https://files.catbox.moe/wdhyhz.png"
+}

@@ -1,0 +1,56 @@
+# ==========================================
+# Moon Launcher - Git Ignore Configuration
+# ==========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+.env
+venv/
+env/
+ENV/
+
+# Minecraft Modpack Instances & Heavy Data
+mod_list/
+DeadZone 1.20.1 Forge/
+NightfallCraft*/
+*.zip
+*.gz
+*.tar
+*.7z
+
+# Minecraft Runtime Files & Folders
+saves/
+logs/
+crash-reports/
+natives/
+assets/
+libraries/
+recruits/
+CustomSkinLoader/
+defaultconfigs/
+fancymenu_data/
+kubejs/
+patchouli_books/
+simple-rpc/
+tacz/
+worldmap/
+journeymap/
+xaero/
+servers.dat*
+options.txt
+usercache.json
+usernamecache.json
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store

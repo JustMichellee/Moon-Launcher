@@ -65,7 +65,13 @@ def get_possible_version_roots():
     roots = []
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(cur_dir)
-    if os.path.exists(parent_dir):
+    for d in (cur_dir, parent_dir):
+        ml = os.path.join(d, "mod_list")
+        if os.path.exists(ml) and ml not in roots:
+            roots.append(ml)
+    if os.path.exists(cur_dir) and cur_dir not in roots:
+        roots.append(cur_dir)
+    if os.path.exists(parent_dir) and parent_dir not in roots:
         roots.append(parent_dir)
     if os.path.exists(r"E:\TLauncher\versions"):
         roots.append(r"E:\TLauncher\versions")
@@ -74,9 +80,47 @@ def get_possible_version_roots():
         roots.append(appdata_mc)
     return roots
 
+# ==============================================================================
+# MODPACK / VERSION REGISTRY
+# Daftar modpack yang tampil di menu /version.
+# Tambahkan entri baru di sini kapan saja ingin memunculkan modpack lain.
+# ==============================================================================
+REGISTERED_VERSIONS = [
+    {
+        "name": "Cursed Walking",
+        "aliases": ["CursedWalkingZS_Clean", "Cursed Walking", "Cursed Walking 1.20.1", "DeadZone 1.20.1 Forge", "DeadZone"],
+    },
+    {
+        "name": "Prominence II",
+        "aliases": ["Prominence_ II Hasturian Era", "Prominence II", "Prominence II [RPG]", "Prominence_II_Hasturian_Era", "prominence-2-hasturian-era", "prominence II"],
+    },
+    {
+        "name": "Homestead",
+        "aliases": ["Homestead - A Cozy Survival Experience", "Homestead"],
+    },
+    # Nanti bisa kamu tambahkan modpack baru di sini, contoh:
+    # {
+    #     "name": "DeadZone 1.20.1 Forge",
+    #     "aliases": ["DeadZone 1.20.1 Forge"],
+    # },
+    # {
+    #     "name": "DeceasedCraft",
+    #     "aliases": ["DeceasedCraft", "DeceasedCraft 1.20.1"],
+    # },
+]
+
 def find_version_dir_by_name(name):
     if not name:
         return None
+    # 1. Cek dari alias modpack terdaftar
+    for entry in REGISTERED_VERSIONS:
+        if name.lower() == entry["name"].lower() or any(name.lower() == a.lower() for a in entry["aliases"]):
+            for alias in entry["aliases"]:
+                for r in get_possible_version_roots():
+                    cand = os.path.join(r, alias)
+                    if os.path.isdir(cand) and (os.path.exists(os.path.join(cand, "launch_args.txt")) or os.path.exists(os.path.join(cand, "mods"))):
+                        return cand
+    # 2. Cek nama folder langsung
     for r in get_possible_version_roots():
         cand = os.path.join(r, name)
         if os.path.isdir(cand) and (os.path.exists(os.path.join(cand, "launch_args.txt")) or os.path.exists(os.path.join(cand, "mods"))):
@@ -84,22 +128,18 @@ def find_version_dir_by_name(name):
     return None
 
 def get_all_available_versions():
+    """
+    Returns registered available Minecraft versions/modpacks.
+    Hanya menampilkan modpack yang ada di REGISTERED_VERSIONS agar rapi.
+    """
     found = {}
-    for r in get_possible_version_roots():
-        try:
-            for item in sorted(os.listdir(r)):
-                item_path = os.path.join(r, item)
-                if not os.path.isdir(item_path):
-                    continue
-                if item.lower() in ("moon launcher", ".system_generated", "__pycache__", "config", "logs"):
-                    continue
-                if (os.path.exists(os.path.join(item_path, "launch_args.txt")) or
-                    os.path.exists(os.path.join(item_path, "mods")) or
-                    any(f.endswith(".jar") for f in os.listdir(item_path))):
-                    if item not in found:
-                        found[item] = item_path
-        except Exception:
-            pass
+    for entry in REGISTERED_VERSIONS:
+        name = entry["name"]
+        for alias in entry["aliases"]:
+            v_dir = find_version_dir_by_name(alias)
+            if v_dir:
+                found[name] = v_dir
+                break
     return found
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
@@ -185,12 +225,44 @@ class MoonDiscordRPC:
     def _get_modpack_icon(self, v_name, cfg):
         if cfg.get('discord_large_image'):
             return cfg['discord_large_image']
-        v_lower = v_name.lower()
-        if any(k in v_lower for k in ('zombie', 'deadzone', 'cursed', 'infection', 'apocalypse', 'walking')):
+        v_lower = (v_name or '').lower()
+
+        # 1. Specific popular modpacks
+        if 'prominence' in v_lower:
+            return "https://media.forgecdn.net/avatars/1969/863/639217114177376898.webp"
+        if 'homestead' in v_lower:
+            return "https://media.forgecdn.net/avatars/thumbnails/791/6/256/256/638146943952272835.png"
+
+        # 2. Horror / Zombie / Apocalypse
+        if any(k in v_lower for k in ('zombie', 'deadzone', 'cursed', 'infection', 'apocalypse', 'walking', 'undead')):
             return "https://mc-heads.net/avatar/Zombie.png"
-        elif 'nightfall' in v_lower:
-            return "https://raw.githubusercontent.com/leonardssh/vscord/main/assets/icons/moon.png"
-        return "https://raw.githubusercontent.com/leonardssh/vscord/main/assets/icons/minecraft.png"
+        if any(k in v_lower for k in ('nightfall', 'fear', 'darkness', 'horror', 'spooky')):
+            return "https://mc-heads.net/avatar/MHF_Moon.png"
+
+        # 3. Anime & Themed
+        if any(k in v_lower for k in ('tensura', 'slime', 'rimuru')):
+            return "https://mc-heads.net/avatar/Rimuru.png"
+        if any(k in v_lower for k in ('jujutsu', 'jjk', 'gojo', 'sukuna')):
+            return "https://mc-heads.net/avatar/Gojo.png"
+        if any(k in v_lower for k in ('piece', 'luffy', 'pirate')):
+            return "https://mc-heads.net/avatar/Luffy.png"
+        if any(k in v_lower for k in ('slayer', 'kimetsu', 'tanjiro', 'demonslayer')):
+            return "https://mc-heads.net/avatar/Tanjiro.png"
+        if any(k in v_lower for k in ('naruto', 'shinobi', 'ninja')):
+            return "https://mc-heads.net/avatar/Naruto.png"
+        if any(k in v_lower for k in ('cobblemon', 'pixelmon', 'pokemon', 'pokecube')):
+            return "https://mc-heads.net/avatar/Pikachu.png"
+
+        # 4. RPG / Magic / Tech
+        if any(k in v_lower for k in ('medieval', 'knight', 'kingdom', 'crusade', 'realm')):
+            return "https://mc-heads.net/avatar/Knight.png"
+        if any(k in v_lower for k in ('magic', 'wizard', 'witch', 'sorcery', 'spell', 'ars_nouveau', 'iron_spell')):
+            return "https://mc-heads.net/avatar/Witch.png"
+        if any(k in v_lower for k in ('create', 'tech', 'factory', 'industrial', 'automation', 'engineer')):
+            return "https://mc-heads.net/avatar/Iron_Golem.png"
+
+        # Fallback default: official chest icon
+        return "https://mc-heads.net/avatar/MHF_Chest.png"
 
     def _get_player_avatar(self, username, cfg):
         if cfg.get('discord_small_image'):
@@ -259,7 +331,7 @@ class MoonDiscordRPC:
         mod_count = count_mods(version_dir)
         user = cfg.get('username', 'Player')
 
-        large_icon = "https://raw.githubusercontent.com/leonardssh/vscord/main/assets/icons/moon.png"
+        large_icon = self._get_modpack_icon(v_name, cfg)
         small_icon = self._get_player_avatar(user, cfg)
 
         act = {
@@ -639,10 +711,10 @@ def get_active_version_dir():
 
     # 4. Fallback to detected versions
     all_v = get_all_available_versions()
+    if "Cursed Walking" in all_v:
+        return all_v["Cursed Walking"]
     if "DeadZone 1.20.1 Forge" in all_v:
         return all_v["DeadZone 1.20.1 Forge"]
-    if "NightfallCraft 2.2.9.7" in all_v:
-        return all_v["NightfallCraft 2.2.9.7"]
     if all_v:
         return list(all_v.values())[0]
 
@@ -765,7 +837,7 @@ def update_launch_args(version_dir, cfg):
             new_lines.append(line)
         i += 1
 
-    with open(args_path, 'w', encoding='utf-8-sig') as f:
+    with open(args_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(new_lines) + "\n")
 
     return True
@@ -1507,7 +1579,7 @@ def launch_game(version_dir, cfg):
     with open(args_path, 'r', encoding='utf-8-sig') as f:
         launch_args = []
         for l in f.readlines():
-            l = l.strip()
+            l = l.strip().lstrip('\ufeff')
             if not l:
                 continue
             if len(l) >= 2 and l[0] == '"' and l[-1] == '"':
@@ -1556,9 +1628,14 @@ def switch_version(curr_dir, cfg):
     avail_map = get_all_available_versions()
     avail = list(avail_map.keys())
 
+    if not avail:
+        print(f"\n{C_RED}No registered versions found!{CLR_RESET}\n")
+        return curr_dir, cfg
+
     print(f"\n{C_WHITE}Select Minecraft Installation Version:{CLR_RESET}")
     for idx, v in enumerate(avail, 1):
-        is_active = (v == os.path.basename(curr_dir))
+        target_dir = avail_map[v]
+        is_active = (target_dir == curr_dir or v.lower() == cfg.get('version_name', '').lower())
         mark = f"{C_GREEN}[ACTIVE]{CLR_RESET}" if is_active else ""
         print(f"  {C_CYAN}[{idx:2d}]{CLR_RESET} {v} {mark}")
 
