@@ -194,7 +194,7 @@ def fetch_remote_version_info(timeout=4.0):
     # 1. Try GitHub Commits API
     api_success = False
     try:
-        req = urllib.request.Request(API_COMMITS_URL, headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
+        req = urllib.request.Request(f"{API_COMMITS_URL}?_t={int(time.time())}", headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             c_data = json.loads(resp.read().decode("utf-8"))
             result["commit_sha"] = c_data.get("sha", "")
@@ -207,7 +207,7 @@ def fetch_remote_version_info(timeout=4.0):
 
     # 2. Try Raw CDN version.json for version tag & notes
     try:
-        raw_v_url = f"{RAW_BASE_URL}version.json"
+        raw_v_url = f"{RAW_BASE_URL}version.json?_t={int(time.time())}"
         req2 = urllib.request.Request(raw_v_url, headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
         with urllib.request.urlopen(req2, timeout=timeout) as resp:
             v_data = json.loads(resp.read().decode("utf-8"))
@@ -242,8 +242,10 @@ def check_for_updates(timeout=3.5):
     has_update = False
     if not local_sha:
         has_update = True
-    elif local_sha.lower() != remote_sha.lower():
-        has_update = True
+    else:
+        s_len = min(len(local_sha), len(remote_sha), 7)
+        if s_len >= 4 and local_sha[:s_len].lower() != remote_sha[:s_len].lower():
+            has_update = True
 
     return {
         "update_available": has_update,
@@ -281,7 +283,7 @@ def get_update_notice():
 
 def download_file_with_progress(url, dest_path, desc=""):
     """Downloads a file and prints a clean progress percentage."""
-    req = urllib.request.Request(url, headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
+    req = urllib.request.Request(f"{url}?_t={int(time.time())}", headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
     with urllib.request.urlopen(req, timeout=12.0) as resp:
         total_size = resp.getheader('Content-Length')
         total_size = int(total_size) if total_size else None
@@ -369,7 +371,7 @@ def apply_update_from_github(force=False):
     # Determine files to update
     files_to_update = []
     try:
-        req = urllib.request.Request(API_TREE_URL, headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
+        req = urllib.request.Request(f"{API_TREE_URL}?_t={int(time.time())}", headers={"User-Agent": "Moon-Launcher-Updater/1.0"})
         with urllib.request.urlopen(req, timeout=8.0) as resp:
             tree_data = json.loads(resp.read().decode("utf-8")).get("tree", [])
 

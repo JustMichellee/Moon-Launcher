@@ -3052,7 +3052,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/test{CLR_RESET} [t]               {C_MUTED}Pre-flight diagnostics & dry-run test{CLR_RESET}",
         f"  {C_CYAN}/fix{CLR_RESET} [f]                {C_MUTED}Auto-repair modpack & runtime issues{CLR_RESET}",
         f"  {C_CYAN}/status{CLR_RESET} [3]             {C_MUTED}System diagnostics, JVM, and mods count{CLR_RESET}",
-        f"  {C_CYAN}/update{CLR_RESET} [u]             {C_MUTED}1-click seamless update directly from GitHub{CLR_RESET}",
+        f"  {C_CYAN}/update{CLR_RESET} [u]             {C_MUTED}1-click seamless update from GitHub{CLR_RESET}",
         f"  {C_CYAN}/crash{CLR_RESET}                  {C_MUTED}Inspect latest crash diagnostics & cause{CLR_RESET}",
         "",
         f"{C_WHITE}\033[1mMULTIPLAYER & NETWORKING\033[0m",
