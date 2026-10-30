@@ -1703,7 +1703,7 @@ def ensure_custom_skin_loader(version_dir, cfg=None):
         return
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
-    csl_template_jar = os.path.join(cur_dir, "templates", "CustomSkinLoader_Universal-15.0.1.jar")
+    csl_template_jar = os.path.join(cur_dir, "templates", "CustomSkinLoader_Universal-15.1.jar")
     if not os.path.exists(csl_template_jar):
         csl_template_jar = os.path.join(cur_dir, "libraries", "customskinloader", "CustomSkinLoader_Universal-15.0.1.jar")
 
@@ -1712,7 +1712,7 @@ def ensure_custom_skin_loader(version_dir, cfg=None):
     if loader != "Vanilla" or os.path.exists(mods_dir):
         os.makedirs(mods_dir, exist_ok=True)
         # 1. Install CustomSkinLoader mod jar
-        target_jar = os.path.join(mods_dir, "CustomSkinLoader_Universal-15.0.1.jar")
+        target_jar = os.path.join(mods_dir, "CustomSkinLoader_Universal-15.1.jar")
         if os.path.exists(csl_template_jar) and not os.path.exists(target_jar):
             try:
                 shutil.copyfile(csl_template_jar, target_jar)
