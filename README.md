@@ -172,14 +172,68 @@ Moon-Launcher/
 
 ## 💻 System Requirements
 
-| Component | Minimum Specification | Recommended Specification |
+Moon Launcher itself is engineered with an ultra-lightweight footprint (< 35 MB RAM, sub-50ms cold-start, near 0% idle CPU overhead). However, running Minecraft Java Edition, modern mod loaders (Forge, Fabric, NeoForge, Quilt), and high-fidelity shaders requires sufficient system hardware.
+
+### 🖥️ Hardware & Platform Specifications
+
+| Component | Minimum Specification (Vanilla / Light) | Recommended Specification (Heavy Modpacks / Shaders) |
 |---|---|---|
-| **Operating System** | Windows 10 (64-bit) / Windows 11 | Windows 10/11 (64-bit) |
-| **Python** | Python 3.8+ (64-bit) | Python 3.11+ (64-bit) |
-| **Java Runtime** | OpenJDK 8 / 17 / 21 | Eclipse Temurin / Azul Zulu OpenJDK |
-| **System Memory (RAM)** | 4 GB | 16 GB+ (Allocate 6–10 GB for modpacks) |
-| **Storage** | 500 MB free storage | Solid State Drive (SSD) with 10 GB+ free space |
-| **Network** | Offline or Broadband | High-speed Internet for modpack downloads & hosting |
+| **Operating System** | Windows 10 (64-bit) Version 1909+ | Windows 10 / 11 (64-bit) Latest Build |
+| **Processor (CPU)** | Intel Core i3-3210 (3.2 GHz) / AMD A8-7600 (3.1 GHz) or equivalent (SSE4.2 required) | Intel Core i5-10400 / AMD Ryzen 5 3600 (6 Cores, 4.0+ GHz boost, high single-core IPC) |
+| **Memory (System RAM)**| 4 GB physical RAM (allocate 2–3 GB to game) | 16 GB+ dual-channel DDR4/DDR5 (allocate 6–10 GB to game) |
+| **Graphics (GPU)** | Intel HD Graphics 4000 / AMD Radeon R5 series (OpenGL 4.4+ support) | NVIDIA GeForce GTX 1660 / RTX 2060 / AMD Radeon RX 5600 XT or higher (4 GB+ VRAM, OpenGL 4.6) |
+| **Storage (Disk)** | 1 GB free space on HDD / SATA SSD | NVMe M.2 SSD with 15 GB+ free space (fast chunk loading & world save) |
+| **Display Resolution**| 1024 x 768 pixels | 1920 x 1080 (Full HD) or 2560 x 1440 (2K QHD) |
+| **Python Environment**| Python 3.8+ 64-bit (Standard Library) | Python 3.11+ 64-bit (Fastest execution speed) |
+| **Network Interface** | Offline / Broadband (1 Mbps for auth) | High-Speed Internet (25+ Mbps for hosting via `/host` and rapid Modrinth downloads) |
+
+---
+
+### ☕ Java Runtime Environment (JRE/JDK) Compatibility Matrix
+
+Minecraft Java Edition requires specific 64-bit Java runtimes depending on the game release generation. Moon Launcher automatically audits your configured Java binary during pre-flight diagnostics (`/test`):
+
+| Minecraft Version Range | Required Java Version | Recommended Vendor Distribution |
+|---|---|---|
+| **Minecraft 1.20.5 – 1.21+** | **Java 21 (64-bit)** | [Eclipse Temurin 21](https://adoptium.net/) / [Azul Zulu 21](https://www.azul.com/downloads/?package=jdk#zulu) |
+| **Minecraft 1.18 – 1.20.4** | **Java 17 (64-bit)** | [Eclipse Temurin 17](https://adoptium.net/) / [Amazon Corretto 17](https://aws.amazon.com/corretto/) |
+| **Minecraft 1.16.5 – 1.17.1** | **Java 16 or 17 (64-bit)** | Eclipse Temurin 17 / OpenJDK 16 |
+| **Minecraft 1.7.10 – 1.12.2** | **Java 8 (64-bit)** *(e.g. 1.8.0_312+)* | [Azul Zulu 8](https://www.azul.com/downloads/?package=jdk#zulu) / Oracle JRE 8 (64-bit) |
+
+> [!IMPORTANT]
+> Always install **64-bit Java**. 32-bit Java binaries cannot allocate more than 1.5 GB of RAM and will cause immediate `OutOfMemoryError` or `Could not reserve enough space for object heap` crashes.
+
+---
+
+### 📊 Recommended Memory (RAM) Allocation Matrix
+
+Configure your memory allocation using `/setting ram <gb>` or `/setting minram <gb>`:
+
+| Workload / Profile Type | Initial RAM (`-Xms`) | Maximum RAM (`-Xmx`) | Notes & Performance Advice |
+|---|---|---|---|
+| **Moon Launcher Studio** | — | **< 35 MB** | Zero CPU overhead while Minecraft runs; runs purely on Python standard library. |
+| **Vanilla Minecraft (1.12 - 1.21)** | `1 GB` | `2 – 4 GB` | Perfectly smooth 60–144+ FPS on modern hardware with default render distance. |
+| **Light Modpack (20 - 60 mods)** | `2 GB` | `4 – 5 GB` | Ideal for optimization modpacks (e.g. *Fabulously Optimized*, *Sodium/Iris* bundles). |
+| **Medium Modpack (60 - 140 mods)**| `3 GB` | `6 – 7 GB` | Standard for tech/magic packs (e.g. *Create*, *Cobblemon*, *BetterMC*). |
+| **Heavy / Kitchen-Sink (150 - 300+ mods)**| `4 GB` | `8 – 10 GB` | Recommended for hardcore packs; ensures smooth chunk generation and mod tick loops. |
+| **Extreme Modpack + High-Res Shaders**| `6 GB` | `10 – 12 GB` | For 32+ chunk render distance with *Complementary Reimagined* or *SEUS PTGI*. |
+| **Hosting LAN Server (`/host`)** | `4 GB` | `8 – 10 GB` | Allocates sufficient memory for mob AI, chunk caching, and multi-player packet routing. |
+
+> [!TIP]
+> **Garbage Collection Optimization**: Avoid allocating more than 12 GB of RAM unless running 300+ mods with 512x resource packs. Allocating excessive memory causes Java Garbage Collection (G1GC) sweeps to take longer, leading to micro-stutters and periodic FPS drops.
+
+---
+
+### 📦 Software & Runtime Dependencies
+
+1. **Microsoft Visual C++ Redistributable (2015–2022 x64)**:
+   - Essential for loading Java native DLLs, LWJGL 3 binaries, and C++ mod dependencies.
+   - Download the official Microsoft installer: [vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+2. **Windows Firewall / Network Permissions**:
+   - Allow Python (`python.exe`) and Java (`javaw.exe`) through Windows Defender Firewall.
+   - **LAN & Radmin P2P Skin Sync**: Uses UDP port `25564` (discovery broadcast) and TCP port `25564` (skin transfer micro-server).
+   - **Local LAN World Discovery**: Uses standard Minecraft UDP port `4445`.
+   - **Multiplayer Server Hosting**: Uses TCP port `25565` (or any custom port allocated by `/host`).
 
 ---
 
