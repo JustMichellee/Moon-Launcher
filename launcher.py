@@ -481,14 +481,14 @@ class MoonDiscordRPC:
         h = host.strip()
         p = str(port).strip()
         if h.startswith('26.'):
-            return f"Mabar (Radmin): {h}:{p}"
+            return f"Multiplayer (Radmin): {h}:{p}"
         elif h.startswith('25.'):
-            return f"Mabar (Hamachi): {h}:{p}"
+            return f"Multiplayer (Hamachi): {h}:{p}"
         elif h.startswith(('192.168.', '10.', '172.')):
-            return f"Mabar (LAN): {h}:{p}"
+            return f"Multiplayer (LAN): {h}:{p}"
         elif p == '25565':
-            return f"Mabar: {h}"
-        return f"Mabar: {h}:{p}"
+            return f"Multiplayer: {h}"
+        return f"Multiplayer: {h}:{p}"
 
 
     def set_menu(self, version_dir, cfg):

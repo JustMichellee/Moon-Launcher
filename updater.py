@@ -103,7 +103,7 @@ def render_box(lines, width=68, title=None):
     out = [top]
     if title:
         v_title = f" {title} "
-        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 4 - t_len)}╮{CLR_RESET}"
+        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 3 - t_len)}╮{CLR_RESET}"
 
     for l in lines:
         s = strip_ansi(str(l)).strip()

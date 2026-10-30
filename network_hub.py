@@ -73,7 +73,7 @@ def render_box(lines, width=68, title=None):
     out = [top]
     if title:
         v_title = f" {title} "
-        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 4 - t_len)}╮{CLR_RESET}"
+        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 3 - t_len)}╮{CLR_RESET}"
 
     for l in lines:
         s = strip_ansi(str(l)).strip()
@@ -328,7 +328,7 @@ def load_network_data():
         with open(FRIENDS_FILE, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
             if "friends" in data:
-                cleaned = [f for f in data["friends"] if f.get("note") != "Primary Profile" and f.get("username") != "Michelle"]
+                cleaned = [f for f in data["friends"] if f.get("note") != "Primary Profile" and f.get("username", "").lower() not in ("michelle", "alex")]
                 if len(cleaned) != len(data["friends"]):
                     data["friends"] = cleaned
                     save_network_data(data)
@@ -652,7 +652,7 @@ def handle_friend_command(args, active_version_dir=None):
         # Display Friends Table
         box_w = 68
         lines = [
-            f"{C_WHITE}[1mPlayer Friends & Mabar Contacts[0m",
+            f"{C_WHITE}[1mPlayer Friends & Multiplayer Contacts[0m",
             f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
         ]
 
