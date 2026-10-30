@@ -1,0 +1,87 @@
+{
+  "version": "15.0.1",
+  "buildNumber": 40,
+  "loadlist": [
+    {
+      "name": "LocalSkin",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "CustomSkinLoader/LocalSkin/skins/{USERNAME}.png",
+      "model": "auto",
+      "cape": "CustomSkinLoader/LocalSkin/capes/{USERNAME}.png",
+      "elytra": "CustomSkinLoader/LocalSkin/elytras/{USERNAME}.png"
+    },
+    {
+      "name": "LocalSkinRoot",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "LocalSkin/skins/{USERNAME}.png",
+      "model": "auto",
+      "cape": "LocalSkin/capes/{USERNAME}.png",
+      "elytra": "LocalSkin/elytras/{USERNAME}.png"
+    },
+    {
+      "name": "LauncherSkins",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "skins/{USERNAME}.png",
+      "model": "auto",
+      "cape": "skins/{USERNAME}.png"
+    },
+    {
+      "name": "Mojang",
+      "type": "MojangAPI",
+      "apiRoot": "https://api.mojang.com/",
+      "sessionRoot": "https://sessionserver.mojang.com/"
+    },
+    {
+      "name": "TLauncher",
+      "type": "ElyByAPI",
+      "root": "https://auth.tlauncher.org/skin/profile/texture/login/"
+    },
+    {
+      "name": "ElyBy",
+      "type": "ElyByAPI",
+      "root": "https://skinsystem.ely.by/textures/"
+    },
+    {
+      "name": "LittleSkin",
+      "type": "CustomSkinAPI",
+      "root": "https://littleskin.cn/csl/"
+    },
+    {
+      "name": "BlessingSkin",
+      "type": "CustomSkinAPI",
+      "root": "https://skin.prinzeugen.net/"
+    },
+    {
+      "name": "MCHeadsSkin",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "https://mc-heads.net/skin/{USERNAME}.png",
+      "model": "auto"
+    },
+    {
+      "name": "MinecraftCapes",
+      "type": "MinecraftCapesAPI",
+      "root": "https://api.minecraftcapes.net/profile/"
+    },
+    {
+      "name": "OptiFine",
+      "type": "Legacy",
+      "checkPNG": false,
+      "model": "auto",
+      "cape": "https://optifine.net/capes/{USERNAME}.png"
+    }
+  ],
+  "enableTransparentSkin": true,
+  "forceLoadAllTextures": true,
+  "enableCape": true,
+  "threadPoolSize": 8,
+  "enableLogStdOut": false,
+  "cacheExpiry": 30,
+  "forceUpdateSkull": false,
+  "enableLocalProfileCache": true,
+  "enableCacheAutoClean": false,
+  "forceDisableCache": false
+}

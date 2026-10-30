@@ -1,0 +1,1039 @@
+"""
+Moon Launcher - Network Hub & Multiplayer Engine
+Provides native Internet Tunneling (/host), LAN Discovery, and Friends/Servers Management (/friend, /server).
+Strictly 100% English UI text and zero emojis.
+"""
+
+import os
+import sys
+import time
+import json
+import socket
+import struct
+import re
+import threading
+import subprocess
+import urllib.request
+import urllib.parse
+import base64
+if sys.platform == 'win32':
+    import winreg
+
+# ANSI Colors matching Moon Launcher styling
+C_CLAUDE = "\033[38;2;217;119;87m"
+C_PURPLE = "\033[38;2;168;85;247m"
+C_CYAN   = "\033[38;2;56;189;248m"
+C_GREEN  = "\033[38;2;34;197;94m"
+C_AMBER  = "\033[38;2;245;158;11m"
+C_RED    = "\033[38;2;239;68;68m"
+C_WHITE  = "\033[38;2;243;244;246m"
+C_MUTED  = "\033[38;2;107;114;128m"
+C_BORDER = "\033[38;2;55;65;81m"
+CLR_RESET= "\033[0m"
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRIENDS_FILE = os.path.join(BASE_DIR, "friends.json")
+RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
+PLAYIT_EXE = os.path.join(RUNTIME_DIR, "playit.exe")
+PLAYIT_LOG = os.path.join(RUNTIME_DIR, "playit.log")
+PLAYIT_URL = "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe"
+
+# Global Tunnel Process State
+TUNNEL_LOCK = threading.Lock()
+TUNNEL_PROC = None
+TUNNEL_LOCAL_PORT = 25565
+TUNNEL_PUBLIC_ADDR = None
+TUNNEL_CLAIM_URL = None
+TUNNEL_START_TIME = None
+
+# ==============================================================================
+# UI RENDERING UTILITIES
+# ==============================================================================
+
+def strip_ansi(text):
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+def get_visible_width(text):
+    return len(strip_ansi(text))
+
+def render_box(lines, width=68, title=None):
+    top = f"{C_BORDER}╭{'─' * (width - 2)}╮{CLR_RESET}"
+    bottom = f"{C_BORDER}╰{'─' * (width - 2)}╯{CLR_RESET}"
+    out = [top]
+    if title:
+        v_title = f" {title} "
+        t_len = get_visible_width(v_title)
+        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 4 - t_len)}╮{CLR_RESET}"
+
+    for l in lines:
+        v_w = get_visible_width(l)
+        pad = max(0, width - 4 - v_w)
+        out.append(f"{C_BORDER}│{CLR_RESET}  {l}{' ' * pad}{C_BORDER}│{CLR_RESET}")
+    out.append(bottom)
+    return "\n".join(out)
+
+# ==============================================================================
+# CLIPBOARD & PROTOCOL UTILITIES
+# ==============================================================================
+
+def copy_to_clipboard(text):
+    """Copies text to Windows system clipboard silently using built-in clip.exe or PowerShell."""
+    if not text or sys.platform != 'win32':
+        return False
+    try:
+        p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        p.communicate(input=text.encode('utf-16le'))
+        if p.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        cmd = f'Set-Clipboard -Value "{text}"'
+        res = subprocess.run(['powershell', '-NoProfile', '-Command', cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        return res.returncode == 0
+    except Exception:
+        pass
+    return False
+
+def get_clipboard_text():
+    """Reads text from Windows system clipboard."""
+    if sys.platform == 'win32':
+        try:
+            res = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'], capture_output=True, text=True, timeout=2)
+            return res.stdout.strip()
+        except Exception:
+            pass
+    return ""
+
+def register_windows_protocol_handler():
+    """Registers moon:// URL protocol handler in HKCU (no admin privileges needed)."""
+    if sys.platform != 'win32':
+        return False
+    try:
+        py_exe = sys.executable
+        target_py = os.path.join(BASE_DIR, "launcher.py")
+        cmd_str = f'"{py_exe}" "{target_py}" "%1"'
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\moon")
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:Moon Launcher Protocol")
+        winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+        cmd_key = winreg.CreateKey(key, r"shell\open\command")
+        winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd_str)
+        winreg.CloseKey(cmd_key)
+        winreg.CloseKey(key)
+        return True
+    except Exception:
+        return False
+
+def generate_friend_invite_link(username, server_address=None, note=None):
+    """Generates both Universal Web and Direct Moon Protocol invite links."""
+    clean_user = str(username).strip()
+    params = {"user": clean_user}
+    if server_address:
+        params["addr"] = str(server_address).strip()
+    if note:
+        params["note"] = str(note).strip()
+    qs = urllib.parse.urlencode(params)
+
+    web_link = f"https://moonlauncher.link/add?{qs}"
+    moon_link = f"moon://friend/add?{qs}"
+
+    # Compact token
+    json_b = json.dumps(params).encode('utf-8')
+    b64_tok = base64.urlsafe_b64encode(json_b).decode('ascii').rstrip('=')
+    token_link = f"moon:invite:{b64_tok}"
+
+    return {
+        "user": clean_user,
+        "addr": server_address or "",
+        "web_link": web_link,
+        "moon_link": moon_link,
+        "token_link": token_link
+    }
+
+def parse_friend_invite(text):
+    """
+    Parses a friend invite from URL (moon:// or https://) or token string.
+    Returns dict with keys: username, address, note, or None if invalid.
+    """
+    if not text:
+        return None
+    raw = str(text).strip()
+
+    # 1. Check for URL structure (moon://... or http(s)://...)
+    url_m = re.search(r'(moon://[^\s"\'<>]+|https?://[^\s"\'<>]+)', raw)
+    if url_m:
+        target_url = url_m.group(1)
+        try:
+            parsed = urllib.parse.urlparse(target_url)
+            qs = urllib.parse.parse_qs(parsed.query)
+            user_list = qs.get('user', qs.get('u', qs.get('name', qs.get('username', []))))
+            addr_list = qs.get('addr', qs.get('server', qs.get('ip', qs.get('s', []))))
+            note_list = qs.get('note', qs.get('n', []))
+
+            u_val = user_list[0] if user_list else ""
+            a_val = addr_list[0] if addr_list else ""
+            n_val = note_list[0] if note_list else ""
+
+            # Check path segments if query parameter had no username (e.g. moon://friend/add/Michelle)
+            if not u_val:
+                segs = [s for s in parsed.path.split('/') if s and s.lower() not in ('add', 'friend', 'invite', 'join')]
+                if segs:
+                    u_val = segs[0]
+
+            if u_val:
+                return {
+                    "username": u_val.strip().replace(" ", "_"),
+                    "address": a_val.strip(),
+                    "note": n_val.strip() or "Added via Invite Link"
+                }
+        except Exception:
+            pass
+
+    # 2. Check base64 token format
+    tok_m = re.search(r'moon:(?:invite|friend):([a-zA-Z0-9_\-=]+)', raw)
+    if tok_m:
+        try:
+            tok = tok_m.group(1)
+            pad = len(tok) % 4
+            if pad:
+                tok += '=' * (4 - pad)
+            dec = base64.urlsafe_b64decode(tok).decode('utf-8')
+            d = json.loads(dec)
+            u_val = d.get('user') or d.get('u') or d.get('name')
+            if u_val:
+                return {
+                    "username": str(u_val).strip().replace(" ", "_"),
+                    "address": str(d.get('addr') or d.get('server') or d.get('ip') or "").strip(),
+                    "note": str(d.get('note') or "Added via Invite Token").strip()
+                }
+        except Exception:
+            pass
+
+    return None
+
+def add_friend_from_invite(invite, data=None):
+    """
+    Saves the parsed invite into contacts, optionally saves server to server manager,
+    pings the server, and prints a formatted confirmation box.
+    """
+    if not invite or not invite.get("username"):
+        return False
+    if data is None:
+        data = load_network_data()
+    friends = data.setdefault("friends", [])
+    servers = data.setdefault("servers", [])
+
+    u_name = invite["username"]
+    addr = invite.get("address", "")
+    note = invite.get("note", "Added via Invite Link")
+
+    # Check existing friend
+    matched = next((f for f in friends if f.get("username", "").lower() == u_name.lower()), None)
+    if matched:
+        if addr:
+            matched["address"] = addr
+        if note:
+            matched["note"] = note
+    else:
+        friends.append({
+            "username": u_name,
+            "address": addr,
+            "note": note,
+            "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+    # If server address is included, also ensure server is listed in Servers manager
+    srv_added = False
+    if addr:
+        existing_srv = next((s for s in servers if s.get("address", "").lower() == addr.lower()), None)
+        if not existing_srv:
+            servers.append({
+                "name": f"{u_name}'s World",
+                "address": addr,
+                "category": f"Friend ({u_name})"
+            })
+            srv_added = True
+
+    save_network_data(data)
+
+    box_w = 68
+    lines = [
+        f"{C_GREEN}\033[1m[OK] Friend Added Successfully via Invite Link!\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}* Player Name     :{CLR_RESET} {C_CYAN}{u_name}{CLR_RESET}",
+    ]
+    if addr:
+        lines.append(f"  {C_WHITE}* Server Address  :{CLR_RESET} {C_WHITE}{addr}{CLR_RESET}")
+        p_res = ping_minecraft_server(addr, timeout=2.0)
+        if p_res["online"]:
+            lines.append(f"  {C_WHITE}* Live Status     :{CLR_RESET} {C_GREEN}ONLINE ({p_res['latency']}ms • {p_res['players_online']}/{p_res['players_max']} players){CLR_RESET}")
+            if p_res["motd"]:
+                lines.append(f"  {C_WHITE}* MOTD            :{CLR_RESET} {C_MUTED}{p_res['motd']}{CLR_RESET}")
+        else:
+            lines.append(f"  {C_WHITE}* Live Status     :{CLR_RESET} {C_AMBER}OFFLINE or Host World not open yet{CLR_RESET}")
+        if srv_added:
+            lines.append(f"  {C_WHITE}* Saved to Server :{CLR_RESET} {C_GREEN}Yes (Saved to /server list){CLR_RESET}")
+    else:
+        lines.append(f"  {C_WHITE}* Server Address  :{CLR_RESET} {C_MUTED}None provided in link{CLR_RESET}")
+
+    lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+    if addr:
+        lines.append(f"{C_CYAN}Ready to play together! Launch Minecraft and connect to {addr}!{CLR_RESET}")
+    else:
+        lines.append(f"{C_MUTED}Tip: When {u_name} opens their world via /host, ask for their updated link.{CLR_RESET}")
+
+    print("\n" + render_box(lines, box_w, title="Friend Added") + "\n")
+    return True
+
+# ==============================================================================
+# DATA STORAGE (friends.json)
+# ==============================================================================
+
+def load_network_data():
+    if not os.path.exists(FRIENDS_FILE):
+        default_data = {
+            "friends": [
+                {
+                    "username": "Michelle",
+                    "address": "",
+                    "note": "Primary Profile",
+                    "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+            ],
+            "servers": [
+                {
+                    "name": "Hypixel Network",
+                    "address": "mc.hypixel.net:25565",
+                    "category": "Minigames"
+                },
+                {
+                    "name": "CubeCraft Games",
+                    "address": "play.cubecraft.net:25565",
+                    "category": "Survival & Bedwars"
+                }
+            ]
+        }
+        save_network_data(default_data)
+        return default_data
+
+    try:
+        with open(FRIENDS_FILE, "r", encoding="utf-8-sig") as f:
+            return json.load(f)
+    except Exception:
+        return {"friends": [], "servers": []}
+
+def save_network_data(data):
+    try:
+        with open(FRIENDS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"{C_RED}Failed to save friends.json: {e}{CLR_RESET}")
+        return False
+
+# ==============================================================================
+# MINECRAFT SERVER LIST PING (SLP) PROTOCOL
+# ==============================================================================
+
+def ping_minecraft_server(host, port=25565, timeout=2.5):
+    """
+    Direct TCP handshake to query server status, latency, player count, and MOTD.
+    Pure Python socket implementation without third-party dependencies.
+    """
+    if ":" in host:
+        parts = host.split(":", 1)
+        host = parts[0]
+        try:
+            port = int(parts[1])
+        except ValueError:
+            pass
+
+    start_time = time.time()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((host, int(port)))
+
+        def pack_varint(val):
+            out = bytearray()
+            while True:
+                part = val & 0x7F
+                val >>= 7
+                out.append(part | (0x80 if val > 0 else 0))
+                if val == 0:
+                    break
+            return bytes(out)
+
+        def read_varint(sock):
+            val = 0
+            for i in range(5):
+                b = sock.recv(1)
+                if not b:
+                    raise ConnectionResetError("Connection lost")
+                byte = b[0]
+                val |= (byte & 0x7F) << (7 * i)
+                if not (byte & 0x80):
+                    break
+            return val
+
+        host_bytes = host.encode('utf-8')
+        handshake_payload = (
+            b'\x00' +
+            pack_varint(765) +
+            pack_varint(len(host_bytes)) + host_bytes +
+            struct.pack('>H', int(port)) +
+            b'\x01'
+        )
+        s.sendall(pack_varint(len(handshake_payload)) + handshake_payload)
+        s.sendall(b'\x01\x00') # Status request
+
+        packet_len = read_varint(s)
+        packet_id = read_varint(s)
+        if packet_id != 0:
+            raise ValueError("Invalid packet id")
+
+        json_len = read_varint(s)
+        received_data = bytearray()
+        while len(received_data) < json_len:
+            chunk = s.recv(min(4096, json_len - len(received_data)))
+            if not chunk:
+                break
+            received_data.extend(chunk)
+
+        latency = int((time.time() - start_time) * 1000)
+        s.close()
+
+        raw_json = json.loads(received_data.decode('utf-8', errors='ignore'))
+        desc = raw_json.get('description', '')
+        motd_text = desc.get('text', '') if isinstance(desc, dict) else str(desc)
+        motd_clean = re.sub(r'§[0-9a-fk-or]', '', motd_text).strip()
+
+        p_info = raw_json.get('players', {})
+        online_p = p_info.get('online', 0)
+        max_p = p_info.get('max', 0)
+        ver_name = raw_json.get('version', {}).get('name', 'Minecraft')
+
+        return {
+            "online": True,
+            "latency": latency,
+            "motd": motd_clean[:45] or "Minecraft Server",
+            "players_online": online_p,
+            "players_max": max_p,
+            "version": ver_name[:25]
+        }
+    except Exception as e:
+        return {
+            "online": False,
+            "latency": 0,
+            "motd": str(e)[:35],
+            "players_online": 0,
+            "players_max": 0,
+            "version": ""
+        }
+
+# ==============================================================================
+# LAN AUTO-DISCOVERY (UDP Multicast Listener)
+# ==============================================================================
+
+def scan_lan_worlds(timeout=2.0):
+    """
+    Listens on Minecraft LAN multicast group 224.0.2.60:4445 for open worlds.
+    Returns list of discovered hosts: [{"world": str, "host_ip": str, "port": int}]
+    """
+    discovered = []
+    seen = set()
+    multicast_group = '224.0.2.60'
+    server_address = ('', 4445)
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(server_address)
+
+        group = socket.inet_aton(multicast_group)
+        mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+        t_end = time.time() + timeout
+        while time.time() < t_end:
+            try:
+                data, addr = sock.recvfrom(1024)
+                text = data.decode('utf-8', errors='ignore')
+                motd_m = re.search(r'\[MOTD\](.*?)\[/MOTD\]', text)
+                ad_m = re.search(r'\[AD\](.*?)\[/AD\]', text)
+                if ad_m:
+                    port = int(ad_m.group(1).strip())
+                    world = motd_m.group(1).strip() if motd_m else "Minecraft LAN World"
+                    key = (addr[0], port)
+                    if key not in seen:
+                        seen.add(key)
+                        discovered.append({
+                            "world": world,
+                            "host_ip": addr[0],
+                            "port": port
+                        })
+            except socket.timeout:
+                break
+            except Exception:
+                break
+        sock.close()
+    except Exception:
+        pass
+
+    return discovered
+
+# ==============================================================================
+# NATIVE INTERNET TUNNEL ENGINE (Playit.gg Anycast Relay)
+# ==============================================================================
+
+def ensure_playit_binary():
+    os.makedirs(RUNTIME_DIR, exist_ok=True)
+    if os.path.exists(PLAYIT_EXE) and os.path.getsize(PLAYIT_EXE) > 1000000:
+        return True
+
+    print(f"\n{C_CYAN}[Moon Launcher] Downloading Playit Anycast Tunnel Agent...{CLR_RESET}")
+    try:
+        req = urllib.request.Request(PLAYIT_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=20) as resp, open(PLAYIT_EXE, 'wb') as out_f:
+            out_f.write(resp.read())
+        print(f"{C_GREEN}[Moon Launcher] Tunnel agent installed successfully ({os.path.getsize(PLAYIT_EXE)} bytes).{CLR_RESET}")
+        return True
+    except Exception as e:
+        print(f"{C_RED}[Moon Launcher] Failed to download tunnel binary: {e}{CLR_RESET}")
+        return False
+
+def detect_active_minecraft_port(version_dir=None):
+    """Detects active Minecraft LAN hosting port from latest.log or defaults to 25565."""
+    if version_dir:
+        log_path = os.path.join(version_dir, "logs", "latest.log")
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()[-60:]
+                for l in reversed(lines):
+                    m = re.search(r'(?:Started on|Hosting on port|Hosted on port|Local game hosted on port)\s*(\d{4,5})', l, re.IGNORECASE)
+                    if m:
+                        return int(m.group(1))
+            except Exception:
+                pass
+    return 25565
+
+def start_internet_tunnel(local_port=25565):
+    global TUNNEL_PROC, TUNNEL_LOCAL_PORT, TUNNEL_PUBLIC_ADDR, TUNNEL_CLAIM_URL, TUNNEL_START_TIME
+
+    with TUNNEL_LOCK:
+        if TUNNEL_PROC and TUNNEL_PROC.poll() is None:
+            return True, TUNNEL_PUBLIC_ADDR, TUNNEL_CLAIM_URL
+
+        if not ensure_playit_binary():
+            return False, None, None
+
+        TUNNEL_LOCAL_PORT = int(local_port)
+        TUNNEL_PUBLIC_ADDR = None
+        TUNNEL_CLAIM_URL = None
+        TUNNEL_START_TIME = time.time()
+
+        # Clean previous log file
+        try:
+            if os.path.exists(PLAYIT_LOG):
+                os.remove(PLAYIT_LOG)
+        except Exception:
+            pass
+
+        try:
+            log_fp = open(PLAYIT_LOG, "w", encoding="utf-8")
+            cmd = [PLAYIT_EXE, "start"]
+            TUNNEL_PROC = subprocess.Popen(
+                cmd,
+                stdout=log_fp,
+                stderr=subprocess.STDOUT,
+                cwd=RUNTIME_DIR,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            )
+        except Exception as e:
+            return False, str(e), None
+
+    # Wait up to 8 seconds to parse claim URL or active tunnel domain from log
+    time.sleep(1.5)
+    for _ in range(12):
+        if os.path.exists(PLAYIT_LOG):
+            try:
+                with open(PLAYIT_LOG, "r", encoding="utf-8", errors="ignore") as f:
+                    log_text = f.read()
+
+                # Search for claim URL if agent is not claimed yet
+                claim_m = re.search(r'(https://playit\.gg/claim/[a-zA-Z0-9_-]+)', log_text)
+                if claim_m:
+                    TUNNEL_CLAIM_URL = claim_m.group(1)
+
+                # Search for assigned address (e.g. *.playit.gg:12345 or *.gl.joinmc.link:25565)
+                addr_m = re.search(r'([a-zA-Z0-9\.\-_]+\.(?:playit\.gg|joinmc\.link|at\.ply\.gg):\d+)', log_text)
+                if addr_m:
+                    TUNNEL_PUBLIC_ADDR = addr_m.group(1)
+                    break
+            except Exception:
+                pass
+        time.sleep(0.5)
+
+    return True, TUNNEL_PUBLIC_ADDR, TUNNEL_CLAIM_URL
+
+def stop_internet_tunnel():
+    global TUNNEL_PROC, TUNNEL_PUBLIC_ADDR, TUNNEL_CLAIM_URL
+    with TUNNEL_LOCK:
+        if TUNNEL_PROC:
+            try:
+                TUNNEL_PROC.terminate()
+                TUNNEL_PROC.wait(timeout=2)
+            except Exception:
+                try: TUNNEL_PROC.kill()
+                except Exception: pass
+            TUNNEL_PROC = None
+        TUNNEL_PUBLIC_ADDR = None
+        TUNNEL_CLAIM_URL = None
+    return True
+
+def get_tunnel_status():
+    with TUNNEL_LOCK:
+        is_running = TUNNEL_PROC is not None and TUNNEL_PROC.poll() is None
+        return {
+            "running": is_running,
+            "local_port": TUNNEL_LOCAL_PORT,
+            "public_address": TUNNEL_PUBLIC_ADDR,
+            "claim_url": TUNNEL_CLAIM_URL,
+            "uptime_seconds": int(time.time() - TUNNEL_START_TIME) if is_running and TUNNEL_START_TIME else 0
+        }
+
+# ==============================================================================
+# COMMAND HANDLER: /friend
+# ==============================================================================
+
+def handle_friend_command(args, active_version_dir=None):
+    """
+    Handles /friend commands:
+    - /friend (or /friend list)
+    - /friend invite (or /friend share, /friend link) -> Generates & copies invite link
+    - /friend add <link_or_name> [ip:port]
+    - /friend remove <name>
+    - /friend ping <name>
+    - /friend note <name> <text>
+    """
+    data = load_network_data()
+    friends = data.get("friends", [])
+
+    if not args or args[0].lower() in ("list", "ls", "show"):
+        # Display Friends Table
+        box_w = 68
+        lines = [
+            f"{C_WHITE}\033[1mPlayer Friends & Mabar Contacts\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+
+        if not friends:
+            lines.append(f"{C_MUTED}No friends added yet.{CLR_RESET}")
+            lines.append(f"{C_MUTED}Add friends via link: {C_CYAN}/friend add <invite_link>{CLR_RESET}")
+            lines.append(f"{C_MUTED}Share your invite link: {C_AMBER}/friend invite{CLR_RESET}")
+        else:
+            for idx, f_item in enumerate(friends, 1):
+                u_name = f_item.get("username", "Unknown")
+                addr = f_item.get("address", "")
+                note = f_item.get("note", "")
+
+                status_tag = f"{C_MUTED}[OFFLINE]{CLR_RESET}"
+                ping_detail = f"{C_MUTED}No Address{CLR_RESET}"
+
+                if addr:
+                    p_res = ping_minecraft_server(addr, timeout=1.2)
+                    if p_res["online"]:
+                        status_tag = f"{C_GREEN}[ONLINE]{CLR_RESET}"
+                        ping_detail = f"{C_GREEN}{p_res['latency']}ms{CLR_RESET} ({p_res['players_online']} players)"
+                    else:
+                        status_tag = f"{C_RED}[IDLE]{CLR_RESET}"
+                        ping_detail = f"{C_MUTED}{addr}{CLR_RESET}"
+
+                name_col = f"{C_CYAN}{u_name}{CLR_RESET}"
+                lines.append(f"  {status_tag} {name_col:<20} {ping_detail}")
+                if note:
+                    lines.append(f"     {C_MUTED}* Note: {note}{CLR_RESET}")
+
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /friend invite • /friend add <link> • /friend ping <name>{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="Friends Hub") + "\n")
+        return
+
+    sub = args[0].lower()
+
+    # If first argument is directly an invite link or token
+    if sub.startswith(('moon://', 'http://', 'https://')) or parse_friend_invite(args[0]):
+        inv = parse_friend_invite(args[0])
+        if inv:
+            add_friend_from_invite(inv, data)
+            return
+
+    # /friend invite / share / link
+    if sub in ("invite", "share", "link", "getlink", "code"):
+        # Resolve active player username
+        username = "Player"
+        script_dir = BASE_DIR
+        local_cfg = os.path.join(script_dir, "launcher_config.json")
+        if active_version_dir and os.path.exists(os.path.join(active_version_dir, "launcher_config.json")):
+            try:
+                with open(os.path.join(active_version_dir, "launcher_config.json"), "r", encoding="utf-8-sig") as f:
+                    username = json.load(f).get("username") or username
+            except Exception: pass
+        elif os.path.exists(local_cfg):
+            try:
+                with open(local_cfg, "r", encoding="utf-8-sig") as f:
+                    username = json.load(f).get("username") or username
+            except Exception: pass
+
+        t_status = get_tunnel_status()
+        server_addr = t_status.get("public_address") if t_status.get("running") else None
+
+        invite = generate_friend_invite_link(username, server_address=server_addr)
+        copied = copy_to_clipboard(invite["web_link"])
+
+        box_w = 70
+        lines = [
+            f"{C_WHITE}\033[1mFriend & Multiplayer Invite Link\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Player Profile  :{CLR_RESET} {C_CYAN}\033[1m{username}\033[0m",
+        ]
+        if server_addr:
+            lines.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_GREEN}{server_addr} (Tunnel Active){CLR_RESET}")
+        else:
+            lines.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_MUTED}None (Start /host to include your game world){CLR_RESET}")
+
+        lines.extend([
+            f"",
+            f"  {C_WHITE}\033[1mShareable Web Link:\033[0m",
+            f"  {C_CYAN}{invite['web_link']}{CLR_RESET}",
+            f"",
+            f"  {C_WHITE}\033[1mDirect Moon Protocol:\033[0m",
+            f"  {C_MUTED}{invite['moon_link']}{CLR_RESET}",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        ])
+        if copied:
+            lines.append(f"  {C_GREEN}[COPIED TO CLIPBOARD]{CLR_RESET} {C_WHITE}Press Ctrl+V to share on Discord or WhatsApp!{CLR_RESET}")
+        else:
+            lines.append(f"  {C_MUTED}Copy and send the link above to your friends!{CLR_RESET}")
+        lines.append(f"  {C_MUTED}Your friends can paste this link into Moon Launcher to add you!{CLR_RESET}")
+
+        print("\n" + render_box(lines, box_w, title="Invite Link") + "\n")
+        return
+
+    # /friend add <name_or_link> [address]
+    elif sub in ("add", "new", "+"):
+        if len(args) < 2:
+            # Check clipboard for invite link
+            clip = get_clipboard_text()
+            inv = parse_friend_invite(clip)
+            if inv:
+                print(f"\n{C_CYAN}Found Friend Invite in Clipboard:{CLR_RESET}")
+                print(f"  Player : {C_WHITE}{inv['username']}{CLR_RESET}")
+                if inv.get('address'):
+                    print(f"  Server : {C_GREEN}{inv['address']}{CLR_RESET}")
+                try:
+                    ans = input(f"\n{C_AMBER}Add this friend to your contacts? [Y/n]: {CLR_RESET}").strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    print()
+                    return
+                if ans in ('', 'y', 'yes'):
+                    add_friend_from_invite(inv, data)
+                    return
+                else:
+                    print(f"{C_MUTED}Cancelled.{CLR_RESET}\n")
+                    return
+
+            print(f"\n{C_RED}Usage: /friend add <username> [ip:port]{CLR_RESET}")
+            print(f"{C_MUTED}Or paste an invite link: /friend add https://moonlauncher.link/add?user=...{CLR_RESET}\n")
+            return
+
+        # Check if argument 1 is an invite link or token
+        inv = parse_friend_invite(args[1])
+        if inv:
+            add_friend_from_invite(inv, data)
+            return
+
+        u_name = args[1].strip().replace(" ", "_")
+        addr = args[2].strip() if len(args) > 2 else ""
+
+        # Check existing
+        for item in friends:
+            if item.get("username", "").lower() == u_name.lower():
+                item["address"] = addr or item.get("address", "")
+                save_network_data(data)
+                print(f"\n{C_GREEN}[OK] Updated contact for friend '{u_name}'!{CLR_RESET}\n")
+                return
+
+        friends.append({
+            "username": u_name,
+            "address": addr,
+            "note": "",
+            "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+        save_network_data(data)
+        print(f"\n{C_GREEN}[OK] Friend '{u_name}' added to your contacts list!{CLR_RESET}")
+        if addr:
+            print(f"{C_MUTED}Server Address: {addr}{CLR_RESET}\n")
+        else:
+            print(f"{C_MUTED}Tip: To generate invite link: /friend invite{CLR_RESET}\n")
+
+    # /friend remove <name>
+    elif sub in ("remove", "delete", "rm", "-"):
+        if len(args) < 2:
+            print(f"\n{C_RED}Usage: /friend remove <username>{CLR_RESET}\n")
+            return
+        u_name = args[1].lower()
+        new_friends = [f for f in friends if f.get("username", "").lower() != u_name]
+        if len(new_friends) == len(friends):
+            print(f"\n{C_AMBER}Friend '{args[1]}' not found in contact list.{CLR_RESET}\n")
+        else:
+            data["friends"] = new_friends
+            save_network_data(data)
+            print(f"\n{C_GREEN}[OK] Removed '{args[1]}' from your friends list.{CLR_RESET}\n")
+
+    # /friend ping <name>
+    elif sub in ("ping", "check"):
+        if len(args) < 2:
+            print(f"\n{C_RED}Usage: /friend ping <username>{CLR_RESET}\n")
+            return
+        target = args[1].lower()
+        matched = next((f for f in friends if f.get("username", "").lower() == target), None)
+        if not matched or not matched.get("address"):
+            print(f"\n{C_AMBER}No server address saved for friend '{args[1]}'.{CLR_RESET}")
+            print(f"{C_MUTED}Set address with: /friend add {args[1]} <ip:port>{CLR_RESET}\n")
+            return
+
+        addr = matched["address"]
+        print(f"\n{C_CYAN}Pinging {matched['username']}'s server at {addr}...{CLR_RESET}")
+        res = ping_minecraft_server(addr, timeout=3.0)
+        box_w = 66
+        if res["online"]:
+            p_lines = [
+                f"{C_GREEN}[PASS] Server is ONLINE!{CLR_RESET}",
+                f"{C_WHITE}Host Friend :{CLR_RESET} {matched['username']}",
+                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
+                f"{C_WHITE}Latency     :{CLR_RESET} {res['latency']} ms",
+                f"{C_WHITE}Players     :{CLR_RESET} {res['players_online']} / {res['players_max']}",
+                f"{C_WHITE}Version     :{CLR_RESET} {res['version']}",
+                f"{C_WHITE}MOTD        :{CLR_RESET} {res['motd']}"
+            ]
+        else:
+            p_lines = [
+                f"{C_RED}[FAIL] Server is OFFLINE or Unreachable{CLR_RESET}",
+                f"{C_WHITE}Host Friend :{CLR_RESET} {matched['username']}",
+                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
+                f"{C_MUTED}Reason: {res['motd']}{CLR_RESET}"
+            ]
+        print("\n" + render_box(p_lines, box_w, title="Ping Results") + "\n")
+
+    # /friend note <name> <text>
+    elif sub in ("note", "memo"):
+        if len(args) < 3:
+            print(f"\n{C_RED}Usage: /friend note <username> <text>{CLR_RESET}\n")
+            return
+        target = args[1].lower()
+        note_txt = " ".join(args[2:])
+        matched = next((f for f in friends if f.get("username", "").lower() == target), None)
+        if matched:
+            matched["note"] = note_txt
+            save_network_data(data)
+            print(f"\n{C_GREEN}[OK] Note updated for '{matched['username']}': {note_txt}{CLR_RESET}\n")
+        else:
+            print(f"\n{C_AMBER}Friend '{args[1]}' not found in contacts.{CLR_RESET}\n")
+    else:
+        print(f"\n{C_RED}Unknown friend command. Available: list, invite, add, remove, ping, note{CLR_RESET}\n")
+
+# ==============================================================================
+# COMMAND HANDLER: /host
+# ==============================================================================
+
+def handle_host_command(args, active_version_dir=None):
+    """
+    Handles /host commands:
+    - /host (or /host status)
+    - /host start [port]
+    - /host stop
+    - /host scan
+    """
+    sub = args[0].lower() if args else "status"
+
+    if sub in ("status", "info"):
+        st = get_tunnel_status()
+        box_w = 68
+        lines = [
+            f"{C_WHITE}\033[1mInternet Multiplayer Host & Tunnel Status\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+        if st["running"]:
+            lines.append(f"  {C_GREEN}* State         : TUNNEL ACTIVE (Online){CLR_RESET}")
+            lines.append(f"  {C_WHITE}* Local Port    : {st['local_port']}{CLR_RESET}")
+            if st["public_address"]:
+                lines.append(f"  {C_CYAN}\033[1m* Public Address: {st['public_address']}\033[0m")
+            elif st["claim_url"]:
+                lines.append(f"  {C_AMBER}* Setup Link    : {st['claim_url']}{CLR_RESET}")
+                lines.append(f"  {C_MUTED}  (Open link once in browser to register free tunnel){CLR_RESET}")
+            else:
+                lines.append(f"  {C_AMBER}* Public Address: Negotiating Anycast Route...{CLR_RESET}")
+            lines.append(f"  {C_MUTED}* Uptime        : {st['uptime_seconds']} seconds{CLR_RESET}")
+            lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+            lines.append(f"{C_MUTED}Share public address with friends to let them join without Radmin!{CLR_RESET}")
+            lines.append(f"{C_MUTED}To stop hosting: /host stop{CLR_RESET}")
+        else:
+            auto_p = detect_active_minecraft_port(active_version_dir)
+            lines.append(f"  {C_MUTED}* State         : Idle (Tunnel Not Running){CLR_RESET}")
+            lines.append(f"  {C_WHITE}* Detected Port : {auto_p}{CLR_RESET}")
+            lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+            lines.append(f"{C_CYAN}To host game for friends over Internet (No Radmin needed):{CLR_RESET}")
+            lines.append(f"  1. In Minecraft, press ESC -> Open to LAN")
+            lines.append(f"  2. In Moon Launcher, type: {C_GREEN}/host start{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="Host Engine") + "\n")
+
+    elif sub in ("start", "up", "on", "enable"):
+        port = int(args[1]) if len(args) > 1 and args[1].isdigit() else detect_active_minecraft_port(active_version_dir)
+        print(f"\n{C_CYAN}[Moon Launcher] Activating Global Internet Tunnel for port {port}...{CLR_RESET}")
+        ok, pub_addr, claim_url = start_internet_tunnel(port)
+        box_w = 68
+        if ok:
+            lines = [
+                f"{C_GREEN}[PASS] Global Internet Tunnel Activated!{CLR_RESET}",
+                f"{C_WHITE}Local Port      :{CLR_RESET} {port}",
+                f"{C_WHITE}Network Mode    :{CLR_RESET} Anycast Cloud Relay (No Radmin / No Port Forward)"
+            ]
+            if pub_addr:
+                lines.append(f"{C_CYAN}\033[1mPublic Address  : {pub_addr}\033[0m")
+                lines.append("")
+                lines.append(f"{C_MUTED}Friends can paste this address into standard Minecraft Multiplayer!{CLR_RESET}")
+            elif claim_url:
+                lines.append(f"{C_AMBER}Claim / Setup   :{CLR_RESET} {claim_url}")
+                lines.append(f"{C_MUTED}Open link in browser to claim your tunnel. Address activates automatically!{CLR_RESET}")
+            else:
+                lines.append(f"{C_MUTED}Tunnel initialized. Run {C_WHITE}/host status{C_MUTED} to view connect domain.{CLR_RESET}")
+            lines.append(f"{C_MUTED}To stop tunnel at any time, type: {C_WHITE}/host stop{CLR_RESET}")
+            print("\n" + render_box(lines, box_w, title="Tunnel Online") + "\n")
+        else:
+            print(f"\n{C_RED}[FAIL] Could not start tunnel: {pub_addr}{CLR_RESET}\n")
+
+    elif sub in ("stop", "down", "off", "disable", "kill"):
+        stop_internet_tunnel()
+        print(f"\n{C_GREEN}[Moon Launcher] Host tunnel stopped. Local port closed.{CLR_RESET}\n")
+
+    elif sub in ("scan", "discover", "lan"):
+        print(f"\n{C_CYAN}[Moon Launcher] Scanning local network and virtual LAN for open Minecraft worlds...{CLR_RESET}")
+        found = scan_lan_worlds(timeout=2.0)
+        box_w = 68
+        lines = [
+            f"{C_WHITE}\033[1mLocal Network & LAN Discovery\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+        if not found:
+            lines.append(f"{C_MUTED}No active LAN broadcasts found in the last 2 seconds.{CLR_RESET}")
+            lines.append(f"{C_MUTED}Make sure host pressed 'Open to LAN' in game.{CLR_RESET}")
+        else:
+            for item in found:
+                addr_str = f"{item['host_ip']}:{item['port']}"
+                lines.append(f"  {C_GREEN}* Found:{CLR_RESET} {C_WHITE}{item['world']}{CLR_RESET}")
+                lines.append(f"    {C_CYAN}Address:{CLR_RESET} {addr_str}")
+                lines.append(f"    {C_MUTED}Add to contacts: /friend add <name> {addr_str}{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="LAN Discovery") + "\n")
+
+    else:
+        print(f"\n{C_RED}Unknown host command. Available: status, start [port], stop, scan{CLR_RESET}\n")
+
+# ==============================================================================
+# COMMAND HANDLER: /server
+# ==============================================================================
+
+def handle_server_command(args):
+    """
+    Handles /server commands:
+    - /server (or /server list)
+    - /server add <name> <ip:port>
+    - /server remove <name>
+    - /server ping <ip:port>
+    """
+    data = load_network_data()
+    servers = data.get("servers", [])
+
+    if not args or args[0].lower() in ("list", "ls", "show"):
+        box_w = 68
+        lines = [
+            f"{C_WHITE}\033[1mFavorite Multiplayer Servers\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+        if not servers:
+            lines.append(f"{C_MUTED}No servers saved.{CLR_RESET}")
+            lines.append(f"{C_MUTED}Save servers via: /server add <label> <ip:port>{CLR_RESET}")
+        else:
+            for item in servers:
+                s_name = item.get("name", "Server")
+                s_addr = item.get("address", "")
+                p_res = ping_minecraft_server(s_addr, timeout=1.5)
+                if p_res["online"]:
+                    st = f"{C_GREEN}[ONLINE]{CLR_RESET}"
+                    det = f"{C_GREEN}{p_res['latency']}ms{CLR_RESET} • {p_res['players_online']} players"
+                else:
+                    st = f"{C_RED}[IDLE]{CLR_RESET}"
+                    det = f"{C_MUTED}Unreachable{CLR_RESET}"
+
+                lines.append(f"  {st} {C_CYAN}{s_name:<20}{CLR_RESET} {det}")
+                lines.append(f"     {C_WHITE}Address:{CLR_RESET} {s_addr}")
+
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /server add <name> <ip> • /server ping <ip> • /server remove <name>{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="Server Browser") + "\n")
+        return
+
+    sub = args[0].lower()
+
+    if sub in ("add", "new", "+"):
+        if len(args) < 3:
+            print(f"\n{C_RED}Usage: /server add <label> <ip:port>{CLR_RESET}\n")
+            return
+        label = args[1].strip()
+        addr = args[2].strip()
+        servers.append({"name": label, "address": addr})
+        data["servers"] = servers
+        save_network_data(data)
+        print(f"\n{C_GREEN}[OK] Saved server '{label}' ({addr}) to favorites!{CLR_RESET}\n")
+
+    elif sub in ("remove", "delete", "rm", "-"):
+        if len(args) < 2:
+            print(f"\n{C_RED}Usage: /server remove <label>{CLR_RESET}\n")
+            return
+        label = args[1].lower()
+        new_s = [s for s in servers if s.get("name", "").lower() != label and s.get("address", "").lower() != label]
+        if len(new_s) == len(servers):
+            print(f"\n{C_AMBER}Server '{args[1]}' not found in list.{CLR_RESET}\n")
+        else:
+            data["servers"] = new_s
+            save_network_data(data)
+            print(f"\n{C_GREEN}[OK] Removed '{args[1]}' from servers list.{CLR_RESET}\n")
+
+    elif sub in ("ping", "check"):
+        if len(args) < 2:
+            print(f"\n{C_RED}Usage: /server ping <ip:port>{CLR_RESET}\n")
+            return
+        addr = args[1].strip()
+        print(f"\n{C_CYAN}Querying Minecraft server {addr}...{CLR_RESET}")
+        p_res = ping_minecraft_server(addr, timeout=3.0)
+        box_w = 66
+        if p_res["online"]:
+            lines = [
+                f"{C_GREEN}[PASS] Server is ONLINE!{CLR_RESET}",
+                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
+                f"{C_WHITE}Latency     :{CLR_RESET} {p_res['latency']} ms",
+                f"{C_WHITE}Players     :{CLR_RESET} {p_res['players_online']} / {p_res['players_max']}",
+                f"{C_WHITE}Version     :{CLR_RESET} {p_res['version']}",
+                f"{C_WHITE}MOTD        :{CLR_RESET} {p_res['motd']}"
+            ]
+        else:
+            lines = [
+                f"{C_RED}[FAIL] Server is OFFLINE or Unreachable{CLR_RESET}",
+                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
+                f"{C_MUTED}Reason: {p_res['motd']}{CLR_RESET}"
+            ]
+        print("\n" + render_box(lines, box_w, title="Server Query") + "\n")
+    else:
+        print(f"\n{C_RED}Unknown server command. Available: list, add, remove, ping{CLR_RESET}\n")

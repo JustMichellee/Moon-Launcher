@@ -14,7 +14,7 @@ if not exist "%TARGET_PY%" (
     set "TARGET_PY=%~dp0Moon Launcher\launcher.py"
 )
 
-:: 1. Prioritaskan Python dari Local AppData (Python 3.x user install)
+:: 1. Prioritize Python from Local AppData
 if exist "%LOCALAPPDATA%\Python\bin\python.exe" (
     "%LOCALAPPDATA%\Python\bin\python.exe" "%TARGET_PY%" %*
     if %ERRORLEVEL% NEQ 0 (
@@ -24,7 +24,7 @@ if exist "%LOCALAPPDATA%\Python\bin\python.exe" (
     goto :end
 )
 
-:: 2. Cek Python dari Programs folder
+:: 2. Check Python from Programs directory
 for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python*") do (
     if exist "%%D\python.exe" (
         "%%D\python.exe" "%TARGET_PY%" %*
@@ -36,7 +36,7 @@ for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python*") do (
     )
 )
 
-:: 3. Cek py launcher
+:: 3. Check py launcher
 py -3 --version >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     py -3 "%TARGET_PY%" %*
@@ -47,7 +47,7 @@ if %ERRORLEVEL% EQU 0 (
     goto :end
 )
 
-:: 4. Cek python di PATH
+:: 4. Check python in PATH
 python -c "import sys" >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     python "%TARGET_PY%" %*
@@ -59,10 +59,10 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 echo ======================================================================
-echo [Moon Launcher] Python tidak ditemukan atau belum terpasang dengan benar!
+echo [Moon Launcher] Python was not found or is not installed properly!
 echo.
-echo Silakan install Python dari https://python.org
-echo Pastikan untuk mencentang opsi "Add python.exe to PATH" saat menginstall.
+echo Please install Python 3.10+ from https://python.org
+echo Make sure to check the option "Add python.exe to PATH" during installation.
 echo ======================================================================
 pause
 
