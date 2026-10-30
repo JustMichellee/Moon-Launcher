@@ -94,7 +94,7 @@ Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt m
   - 🕹️ **Singleplayer Gameplay**: Dynamically inspects world folders and parses live NBT level data to display current world names.
   - 🌐 **Multiplayer & Co-op**: Detects connected server IP addresses, LAN broadcasts, virtual networks, and active Anycast tunnels.
   - 👤 **Player Head Avatars**: Automatically extracts and displays the player's 2D skin head avatar directly in Discord.
-  - 🖼️ **Dynamic Modpack Logos**: Automatically uploads local profile icons (`icon.png`); defaults to a continuous animated grass icon if no custom logo is found.
+  - 🖼️ **Dynamic Modpack Logos**: Automatically uploads local profile icons (`icon.png`); defaults to the official Minecraft grass block icon if no custom logo is found.
 
 ### 4. Universal Offline & Online Skin Integration (CustomSkinLoader CSL)
 - **Universal Multi-Loader Deployment**: Automatically configures and deploys CustomSkinLoader across Forge, Fabric, NeoForge, and Quilt profiles.
