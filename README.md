@@ -50,7 +50,7 @@
 
 - [Overview](#-overview)
 - [Key Architectural Highlights](#-key-architectural-highlights)
-- [Repository Structure](#-repository-structure)
+- [Directory Structure & Architecture](#-directory-structure--architecture)
 - [System Requirements](#-system-requirements)
 - [Installation & Quick Start](#-installation--quick-start)
 - [Command Matrix & CLI Reference](#-command-matrix--cli-reference)
@@ -113,30 +113,54 @@ Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt m
 
 ---
 
-## 📁 Repository Structure
+## 📁 Directory Structure & Architecture
+
+Moon Launcher organizes both its lightweight launcher engine and local Minecraft runtime data within an intuitive, fully documented modular structure:
 
 ```text
 Moon-Launcher/
 │
 ├── launcher.py                    # Core launcher engine, Discord IPC & CLI studio
 ├── network_hub.py                 # P2P Anycast multiplayer tunneling & friends system
-├── Moon Launcher.bat              # 1-Click Windows launch script
-├── launcher_config.json           # Default launcher configuration
+├── Moon Launcher.bat              # 1-Click Windows launch script (auto-detects Python)
+├── launcher_config.json           # User configuration (RAM, player nickname, resolution)
+├── friends.json                   # Multiplayer contacts, saved friend hosts & bookmarks
 │
-├── assets/                        # Launcher graphics and Discord RPC brand assets
-│   ├── default_icon.png           # Default launcher window icon
-│   ├── minecraft_default_icon.png # Discord RPC default icon fallback
-│   └── minecraft_title_logo.png   # Terminal & presence header asset
-│
-├── templates/                     # Skin engine templates & runtime assets
-│   ├── CustomSkinLoader.json      # Universal offline skin multi-provider config
-│   └── CustomSkinLoader_*.jar     # Offline skin engine library
+├── assets/                        # Minecraft assets (sounds, textures, fonts, title logos)
+├── config/                        # Global mod configuration files & client settings
+├── libraries/                     # Java runtime dependencies, LWJGL natives & loaders
+├── logs/                          # Game output logs (latest.log) & debug information
+├── mods/                          # Active mod JARs for the primary game profile
+├── resourcepacks/                 # Custom texture packs, audio packs, and UI themes
+├── runtime/                       # Bundled Java runtimes (Java 8, Java 17, Java 21)
+├── saves/                         # Singleplayer worlds, LAN saves & dimension data
+├── shaderpacks/                   # Graphical shader packs (Embeddium / Oculus / Iris)
+├── skins/                         # Local skin storage (0ms offline CustomSkinLoader cache)
+├── templates/                     # CustomSkinLoader templates & engine libraries
+├── versions/                      # Installed Minecraft version profiles (Forge, Fabric, NeoForge)
 │
 ├── .gitattributes                 # Git LFS tracking configuration
-├── .gitignore                     # Git filter for caches, saves, and logs
+├── .gitignore                     # Git filter for temporary caches, saves, and logs
 ├── LICENSE                        # MIT Open-Source License
 └── README.md                      # Official documentation
 ```
+
+### 📂 Directory Reference Guide
+
+| Directory | Purpose & Function |
+|---|---|
+| **`assets/`** | Stores Minecraft game sound effects, music, language files, and launcher icons. |
+| **`config/`** | Contains `.json`, `.toml`, and `.cfg` configuration files for installed mods and loaders. |
+| **`libraries/`** | Java class libraries, Forge/Fabric dependencies, and LWJGL native binaries (`.dll`). |
+| **`logs/`** | Minecraft runtime logs (`latest.log`) and launcher activity records parsed by `/crash`. |
+| **`mods/`** | Storage for active `.jar` mod files. Managed dynamically via `/mods` (enable, disable, filter). |
+| **`resourcepacks/`** | Texture packs, custom models, and visual overhauls placed by the player. |
+| **`runtime/`** | Isolated 64-bit Java runtimes (JRE 8 for legacy versions, OpenJDK 17/21 for modern). |
+| **`saves/`** | Singleplayer world saves, player inventories, and NBT level data tracked by `/host`. |
+| **`shaderpacks/`** | High-performance GLSL shader packs utilized by Oculus/Embeddium or Iris. |
+| **`skins/`** | High-speed local cache for player and friend skins rendered via CustomSkinLoader. |
+| **`templates/`** | Pre-configured `CustomSkinLoader.json` templates and universal skin loader JARs. |
+| **`versions/`** | Individual Minecraft profiles and version JARs (e.g. `1.20.1-Forge`, `Fabric-1.21`). |
 
 ---
 
