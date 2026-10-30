@@ -119,23 +119,21 @@ Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt m
 Moon-Launcher/
 │
 ├── launcher.py                    # Core launcher engine, Discord IPC & CLI studio
-├── Moon Launcher.bat              # 1-Click Launch Script (detects Python environment)
-├── launcher_config.json           # Launcher configuration (RAM, player, resolution, paths)
+├── network_hub.py                 # P2P Anycast multiplayer tunneling & friends system
+├── Moon Launcher.bat              # 1-Click Windows launch script
+├── launcher_config.json           # Default launcher configuration
 │
-├── templates/                     # CustomSkinLoader templates & launcher assets
-│   ├── CustomSkinLoader.json      # Universal multi-provider skin configuration
-│   └── CustomSkinLoader_*.jar     # Universal skin engine runtime library
+├── assets/                        # Launcher graphics and Discord RPC brand assets
+│   ├── default_icon.png           # Default launcher window icon
+│   ├── minecraft_default_icon.png # Discord RPC default icon fallback
+│   └── minecraft_title_logo.png   # Terminal & presence header asset
 │
-├── versions/                      # Minecraft version profiles directory
-│   └── <Profile_Name>/            # Version directory (e.g. Forge, Fabric, NeoForge, Vanilla)
-│       ├── icon.png               # Custom profile icon for Discord RPC (optional)
-│       ├── launch_args.txt        # Synchronized JVM launch parameters
-│       ├── mods/                  # Installed mod JARs
-│       ├── saves/                 # Singleplayer world saves
-│       └── options.txt            # Minecraft options and keybindings
+├── templates/                     # Skin engine templates & runtime assets
+│   ├── CustomSkinLoader.json      # Universal offline skin multi-provider config
+│   └── CustomSkinLoader_*.jar     # Offline skin engine library
 │
 ├── .gitattributes                 # Git LFS tracking configuration
-├── .gitignore                     # Git filter for caches, saves, and runtime logs
+├── .gitignore                     # Git filter for caches, saves, and logs
 ├── LICENSE                        # MIT Open-Source License
 └── README.md                      # Official documentation
 ```
