@@ -13,7 +13,7 @@
 
 **A lightweight, privacy-focused, keyboard-driven Minecraft launcher built with pure Python standard libraries, native Discord Rich Presence, zero-config Anycast P2P multiplayer tunneling, universal skin synchronization, and intelligent diagnostics.**
 
-[![Collaboration](https://img.shields.io/badge/Collaborators-Epithap%20x%20alfianzidan321--cmd-blueviolet?style=for-the-badge&logo=github)](https://github.com/alfianzidan321-cmd/Moon-Launcher)
+[![Collaboration](https://img.shields.io/badge/Collaborators-Epithap%20x%20JustMichellee-blueviolet?style=for-the-badge&logo=github)](https://github.com/JustMichellee/Moon-Launcher)
 [![Python](https://img.shields.io/badge/Python-3.8+_(Zero_Deps)-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows_(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](Moon-Launcher/)
 [![Minecraft](https://img.shields.io/badge/Minecraft-Vanilla%20%7C%20Forge%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Quilt-5B8C33?style=for-the-badge&logo=minecraft&logoColor=white)](https://minecraft.net)
@@ -26,9 +26,9 @@
 <table>
   <tr>
     <td align="center">
-      <a href="https://github.com/alfianzidan321-cmd">
-        <img src="https://github.com/alfianzidan321-cmd.png?size=100" width="100px;" alt="alfianzidan321-cmd"/><br />
-        <sub><b>alfianzidan321-cmd</b></sub>
+      <a href="https://github.com/JustMichellee">
+        <img src="https://github.com/JustMichellee.png?size=100" width="100px;" alt="JustMichellee"/><br />
+        <sub><b>JustMichellee</b></sub>
       </a><br />
       <sub><b>Project Lead & Repository Maintainer</b></sub>
     </td>
@@ -123,8 +123,8 @@ Moon-Launcher/
 ├── launcher_config.json           # User configuration (RAM, player, resolution, paths)
 │
 ├── skins/                         # Local skin directory (0ms offline CustomSkinLoader cache)
-│   ├── Michelle.png               # Custom player skin template
-│   └── Alfian.png                 # Custom player skin template
+│   ├── JustMichellee.png          # Custom player skin template
+│   └── Alex.png                   # Default skin template
 │
 ├── templates/                     # System templates and engine assets
 │   ├── CustomSkinLoader.json      # Universal multi-provider skin configuration
@@ -173,7 +173,7 @@ Ensure you have the following installed on Windows:
 
 ### 2. Download / Clone the Repository
 ```bash
-git clone https://github.com/alfianzidan321-cmd/Moon-Launcher.git
+git clone https://github.com/JustMichellee/Moon-Launcher.git
 cd Moon-Launcher
 ```
 
@@ -312,7 +312,7 @@ Moon Launcher permanently resolves this with a unified **CustomSkinLoader (CSL)*
   ```
 - **Synchronize a Friend's Skin**:
   ```text
-  /skin friend Michelle https://example.com/michelle_skin.png
+  /skin friend JustMichellee https://example.com/michelle_skin.png
   ```
 
 ---
@@ -396,7 +396,7 @@ Moon Launcher incorporates automated health and debugging tools to eliminate cra
 
 | Collaborator | GitHub Profile | Primary Responsibilities |
 |---|---|---|
-| **alfianzidan321-cmd** | [@alfianzidan321-cmd](https://github.com/alfianzidan321-cmd) | Project Lead, Repository Maintainer, UI/UX Design, Testing |
+| **JustMichellee** | [@JustMichellee](https://github.com/JustMichellee) | Project Lead, Repository Maintainer, UI/UX Design, Testing |
 | **Epithap** | [@Epithap](https://github.com/Epithap) | Core Systems Architect, Launcher Engine, Discord IPC Pipe, Anycast Tunnel Integration |
 
 ### Upstream Open-Source Acknowledgments:
