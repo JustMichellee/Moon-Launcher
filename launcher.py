@@ -1,4 +1,5 @@
 import network_hub
+import updater
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -2796,6 +2797,9 @@ def print_banner(version_dir, cfg):
     print(f"  {pad_visible(p5, col1_w)}  {pad_visible(p6, col2_w)}")
     print()
     print(f"  {C_MUTED}Quick Commands:{CLR_RESET} {C_CYAN}/play{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_GREEN}/test{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_AMBER}/fix{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_AMBER}/setting{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_BLUE}/version{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_MUTED}/help{CLR_RESET}")
+    u_notice = updater.get_update_notice()
+    if u_notice:
+        print(f"  {u_notice}")
     print(f"{C_BORDER}{'─' * (box_w + 4)}{CLR_RESET}")
 
 def print_help(topic=None):
@@ -3048,6 +3052,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/test{CLR_RESET} [t]               {C_MUTED}Pre-flight diagnostics & dry-run test{CLR_RESET}",
         f"  {C_CYAN}/fix{CLR_RESET} [f]                {C_MUTED}Auto-repair modpack & runtime issues{CLR_RESET}",
         f"  {C_CYAN}/status{CLR_RESET} [3]             {C_MUTED}System diagnostics, JVM, and mods count{CLR_RESET}",
+        f"  {C_CYAN}/update{CLR_RESET} [u]             {C_MUTED}1-click seamless update directly from GitHub{CLR_RESET}",
         f"  {C_CYAN}/crash{CLR_RESET}                  {C_MUTED}Inspect latest crash diagnostics & cause{CLR_RESET}",
         "",
         f"{C_WHITE}\033[1mMULTIPLAYER & NETWORKING\033[0m",
@@ -5509,6 +5514,7 @@ def main():
 
     # Start Native Zero-Config LAN & Radmin P2P Skin Auto-Sync Service
     network_hub.start_lan_skin_service(cfg.get('username', 'Player'), version_dir)
+    updater.start_background_update_checker()
 
     # Process CLI arguments if passed (e.g. python launcher.py /play or /install homestead)
     if len(sys.argv) > 1:
@@ -5622,6 +5628,12 @@ def main():
             sub_folder = sys.argv[2].lower() if len(sys.argv) > 2 else None
             open_folder(version_dir, sub_folder)
             return
+        elif arg_cmd in ('/update', 'update', '/upgrade', 'upgrade', '/u', 'u'):
+            updater.handle_update_command(sys.argv[2:], version_dir, cfg)
+            print(f"\n{C_MUTED}Press ENTER to exit...{CLR_RESET}", end="", flush=True)
+            try: input()
+            except (KeyboardInterrupt, EOFError): pass
+            return
         elif arg_cmd in ('/crash', 'crash', '/logs', 'logs', '/log', 'log'):
             show_crash_report(version_dir)
             print(f"\n{C_MUTED}Press ENTER to exit...{CLR_RESET}", end="", flush=True)
@@ -5713,6 +5725,9 @@ def main():
 
             elif cmd in ('/invite', 'invite', '/share', 'share'):
                 network_hub.handle_friend_command(['invite'], version_dir)
+
+            elif cmd in ('/update', 'update', '/upgrade', 'upgrade'):
+                updater.handle_update_command(raw_parts[1:], version_dir, cfg)
 
             elif cmd in ('/friend', 'friend', '/friends', 'friends'):
                 network_hub.handle_friend_command(raw_parts[1:], version_dir)
