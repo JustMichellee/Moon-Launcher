@@ -98,9 +98,10 @@ Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt m
 
 ### 4. Universal Offline & Online Skin Integration (CustomSkinLoader CSL)
 - **Universal Multi-Loader Deployment**: Automatically configures and deploys CustomSkinLoader across Forge, Fabric, NeoForge, and Quilt profiles.
+- **Native Zero-Config LAN & Radmin P2P Skin Auto-Sync**: Built-in background daemon (UDP/TCP port `25564`) automatically discovers and exchanges custom player skins with other Moon Launcher users across local Wi-Fi or Radmin VPN (`26.x.x.x`) with zero setup and zero internet dependency.
 - **Local-First Zero-Latency Pipeline**: Resolves skins locally from `skins/<username>.png` with 0ms delay.
 - **Multi-Provider Fallback**: Seamlessly falls back to Mojang, TLauncher, ElyBy, LittleSkin, BlessingSkin, and MCHeads.
-- **Friend Skin Synchronization**: Set custom skins for yourself (`/skin <url|file|player>`) or assign skins to your multiplayer friends (`/skin friend <name> <url>`) so everyone sees custom skins in-game.
+- **Friend Skin Synchronization**: Set custom skins for yourself (`/skin <url|file|player>`), assign friend skins (`/skin friend <name> <url>`), or inspect active peer sync status (`/lan`).
 
 ### 5. Intelligent Diagnostics & Self-Repair Engine
 - **Pre-Flight Diagnostics (`/test`)**: Audits Java runtime compatibility (Java 8 vs 17 vs 21), verifies client JAR checksums, checks LWJGL native DLLs, and performs simulated dry-run boots.
@@ -239,6 +240,7 @@ Moon Launcher features a comprehensive command-line interface. Commands can be i
 | `/friend` | `add <link|name>` | Add a friend via their invite link or `username [ip:port]` |
 | `/friend` | `ping <name>` | Query real-time latency and player count for a friend's hosted world |
 | `/server` | `add <name> <ip>` | Bookmark a multiplayer server to your favorites list |
+| `/lan` | `[sync]` | Inspect native LAN & Radmin P2P skin auto-sync daemon and force a discovery probe |
 
 ### Modpack & Version Management
 | Command | Arguments | Description |

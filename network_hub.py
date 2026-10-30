@@ -1037,3 +1037,346 @@ def handle_server_command(args):
         print("\n" + render_box(lines, box_w, title="Server Query") + "\n")
     else:
         print(f"\n{C_RED}Unknown server command. Available: list, add, remove, ping{CLR_RESET}\n")
+
+
+# ==============================================================================
+# NATIVE ZERO-CONFIG LAN & RADMIN P2P SKIN AUTO-SYNC ENGINE
+# ==============================================================================
+
+import hashlib
+import shutil
+
+LAN_SYNC_UDP_PORT = 25564
+LAN_SYNC_TCP_BASE = 25564
+LAN_SYNC_RUNNING = False
+LAN_TCP_PORT = None
+LAN_TCP_SOCKET = None
+LAN_UDP_SOCKET = None
+LAN_ACTIVE_USER = None
+LAN_ACTIVE_VERSION_DIR = None
+LAN_PEERS_LOCK = threading.Lock()
+LAN_PEERS = {}  # {username: {'ip': str, 'port': int, 'hash': str, 'last_seen': float, 'synced': bool}}
+LAN_TRIGGER_EVENT = threading.Event()
+
+def get_broadcast_targets():
+    """Detects local broadcast targets across WiFi, Ethernet, and virtual LANs (Radmin VPN, Tailscale, ZeroTier)."""
+    targets = {'255.255.255.255'}
+    try:
+        out = subprocess.check_output('ipconfig', text=True, encoding='cp437', errors='ignore')
+        ips = re.findall(r'IPv4 Address[^\:]*:\s*([0-9\.]+)', out)
+        for ip in ips:
+            parts = ip.split('.')
+            if len(parts) == 4:
+                targets.add(f"{parts[0]}.{parts[1]}.{parts[2]}.255")
+                if parts[0] == '26':
+                    targets.add("26.255.255.255")
+                    targets.add(f"26.{parts[1]}.{parts[2]}.255")
+    except Exception:
+        pass
+    return list(targets)
+
+def get_local_skin_payload(username=None):
+    """Retrieves the local skin binary and MD5 hash for the given username."""
+    u = username or LAN_ACTIVE_USER
+    if not u:
+        return None, ""
+    skins_dir = os.path.join(BASE_DIR, "skins")
+    skin_file = os.path.join(skins_dir, f"{u}.png")
+    if os.path.exists(skin_file) and os.path.getsize(skin_file) > 50:
+        try:
+            with open(skin_file, "rb") as f:
+                data = f.read()
+            if data.startswith(b'\x89PNG'):
+                return data, hashlib.md5(data).hexdigest()
+        except Exception:
+            pass
+    return None, ""
+
+def distribute_peer_skin(peer_username, skin_bytes, version_dir=None):
+    """Saves a peer's skin and distributes it to all CustomSkinLoader folders."""
+    if not peer_username or not skin_bytes or not skin_bytes.startswith(b'\x89PNG'):
+        return False
+    try:
+        skins_dir = os.path.join(BASE_DIR, "skins")
+        os.makedirs(skins_dir, exist_ok=True)
+        master_dest = os.path.join(skins_dir, f"{peer_username}.png")
+        with open(master_dest, "wb") as f:
+            f.write(skin_bytes)
+
+        target_dirs = []
+        v_dir = version_dir or LAN_ACTIVE_VERSION_DIR
+        if v_dir and os.path.exists(v_dir):
+            target_dirs.extend([
+                os.path.join(v_dir, "CustomSkinLoader", "LocalSkin", "skins"),
+                os.path.join(v_dir, "LocalSkin", "skins"),
+                os.path.join(v_dir, "skins")
+            ])
+
+        versions_root = os.path.join(BASE_DIR, "versions")
+        if os.path.exists(versions_root):
+            for v_name in os.listdir(versions_root):
+                v_path = os.path.join(versions_root, v_name)
+                if os.path.isdir(v_path):
+                    target_dirs.append(os.path.join(v_path, "CustomSkinLoader", "LocalSkin", "skins"))
+                    target_dirs.append(os.path.join(v_path, "LocalSkin", "skins"))
+
+        appdata_mc = os.path.expandvars(r"%APPDATA%\.minecraft")
+        target_dirs.append(os.path.join(appdata_mc, "CustomSkinLoader", "LocalSkin", "skins"))
+        target_dirs.append(os.path.join(appdata_mc, "LocalSkin", "skins"))
+
+        for t in target_dirs:
+            try:
+                os.makedirs(t, exist_ok=True)
+                dest = os.path.join(t, f"{peer_username}.png")
+                shutil.copyfile(master_dest, dest)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
+
+def _lan_tcp_server_loop():
+    """Lightweight HTTP server serving local player skin to requesting peers."""
+    global LAN_TCP_SOCKET, LAN_TCP_PORT, LAN_SYNC_RUNNING
+    while LAN_SYNC_RUNNING and LAN_TCP_SOCKET:
+        try:
+            conn, addr = LAN_TCP_SOCKET.accept()
+            req = conn.recv(1024).decode('utf-8', errors='ignore')
+            lines = req.splitlines()
+            if lines and lines[0].startswith("GET"):
+                path = lines[0].split()[1] if len(lines[0].split()) > 1 else ""
+                target_user = LAN_ACTIVE_USER
+                if path.startswith("/skin/"):
+                    req_u = path.split("/skin/")[1].strip()
+                    if req_u and req_u != "raw":
+                        target_user = req_u.replace(".png", "")
+                
+                skin_data, _ = get_local_skin_payload(target_user)
+                if skin_data:
+                    resp = (
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: image/png\r\n"
+                        b"Content-Length: " + str(len(skin_data)).encode() + b"\r\n"
+                        b"Connection: close\r\n\r\n" + skin_data
+                    )
+                    conn.sendall(resp)
+                else:
+                    conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+            conn.close()
+        except Exception:
+            if not LAN_SYNC_RUNNING:
+                break
+
+def _lan_udp_loop():
+    """Listens for peer beacons on LAN/Radmin and sends periodic discovery broadcasts."""
+    global LAN_UDP_SOCKET, LAN_SYNC_RUNNING, LAN_ACTIVE_USER, LAN_TCP_PORT
+    last_broadcast = 0
+    broadcast_interval = 8.0
+
+    while LAN_SYNC_RUNNING and LAN_UDP_SOCKET:
+        now = time.time()
+        if now - last_broadcast >= broadcast_interval or LAN_TRIGGER_EVENT.is_set():
+            LAN_TRIGGER_EVENT.clear()
+            last_broadcast = now
+            _, my_hash = get_local_skin_payload(LAN_ACTIVE_USER)
+            if LAN_ACTIVE_USER and LAN_TCP_PORT:
+                payload = json.dumps({
+                    "magic": "MOON_SKIN_V1",
+                    "user": LAN_ACTIVE_USER,
+                    "hash": my_hash or "",
+                    "port": LAN_TCP_PORT
+                }).encode('utf-8')
+                for b_target in get_broadcast_targets():
+                    try:
+                        LAN_UDP_SOCKET.sendto(payload, (b_target, LAN_SYNC_UDP_PORT))
+                    except Exception:
+                        pass
+
+        try:
+            data, (remote_ip, remote_port) = LAN_UDP_SOCKET.recvfrom(4096)
+            msg = json.loads(data.decode('utf-8'))
+            if msg.get("magic") == "MOON_SKIN_V1":
+                peer_user = str(msg.get("user", "")).strip()
+                peer_hash = str(msg.get("hash", "")).strip()
+                peer_tcp = int(msg.get("port", 0))
+
+                if peer_user and LAN_ACTIVE_USER and peer_user.lower() != LAN_ACTIVE_USER.lower() and peer_tcp > 0:
+                    with LAN_PEERS_LOCK:
+                        peer_info = LAN_PEERS.setdefault(peer_user, {
+                            "ip": remote_ip,
+                            "port": peer_tcp,
+                            "hash": peer_hash,
+                            "last_seen": now,
+                            "synced": False
+                        })
+                        peer_info["ip"] = remote_ip
+                        peer_info["port"] = peer_tcp
+                        peer_info["last_seen"] = now
+
+                    _, local_hash = get_local_skin_payload(peer_user)
+                    if peer_hash and (local_hash != peer_hash):
+                        try:
+                            ip_call = "127.0.0.1" if remote_ip in ("127.0.0.1", "0.0.0.0") else remote_ip
+                            url = f"http://{ip_call}:{peer_tcp}/skin/raw"
+                            req = urllib.request.Request(url, headers={'User-Agent': 'MoonLauncher-P2P/1.0'})
+                            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                                skin_bytes = resp.read()
+                            
+                            if skin_bytes.startswith(b'\x89PNG'):
+                                if distribute_peer_skin(peer_user, skin_bytes, LAN_ACTIVE_VERSION_DIR):
+                                    with LAN_PEERS_LOCK:
+                                        LAN_PEERS[peer_user]["hash"] = peer_hash
+                                        LAN_PEERS[peer_user]["synced"] = True
+                                    print(f"\n{C_GREEN}[Moon LAN] Auto-synced custom skin for '{peer_user}' ({remote_ip})!{CLR_RESET}\n", end="", flush=True)
+
+                                    _, my_hash = get_local_skin_payload(LAN_ACTIVE_USER)
+                                    reply_payload = json.dumps({
+                                        "magic": "MOON_SKIN_V1",
+                                        "user": LAN_ACTIVE_USER,
+                                        "hash": my_hash or "",
+                                        "port": LAN_TCP_PORT
+                                    }).encode('utf-8')
+                                    LAN_UDP_SOCKET.sendto(reply_payload, (remote_ip, LAN_SYNC_UDP_PORT))
+                        except Exception:
+                            pass
+        except socket.timeout:
+            continue
+        except Exception:
+            if not LAN_SYNC_RUNNING:
+                break
+
+def start_lan_skin_service(username=None, version_dir=None):
+    """Starts the native LAN & Radmin P2P Skin Auto-Sync service in background."""
+    global LAN_SYNC_RUNNING, LAN_TCP_SOCKET, LAN_TCP_PORT, LAN_UDP_SOCKET
+    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR
+
+    if LAN_SYNC_RUNNING:
+        update_lan_skin_identity(username, version_dir)
+        return
+
+    LAN_ACTIVE_USER = username or "Player"
+    LAN_ACTIVE_VERSION_DIR = version_dir
+    LAN_SYNC_RUNNING = True
+
+    LAN_TCP_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    LAN_TCP_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    LAN_TCP_PORT = None
+    for p in range(LAN_SYNC_TCP_BASE, LAN_SYNC_TCP_BASE + 20):
+        try:
+            LAN_TCP_SOCKET.bind(('0.0.0.0', p))
+            LAN_TCP_PORT = p
+            LAN_TCP_SOCKET.listen(10)
+            break
+        except Exception:
+            continue
+
+    if not LAN_TCP_PORT:
+        LAN_SYNC_RUNNING = False
+        return
+
+    try:
+        LAN_UDP_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        LAN_UDP_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        LAN_UDP_SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        LAN_UDP_SOCKET.bind(('0.0.0.0', LAN_SYNC_UDP_PORT))
+        LAN_UDP_SOCKET.settimeout(0.5)
+    except Exception:
+        LAN_SYNC_RUNNING = False
+        try: LAN_TCP_SOCKET.close()
+        except Exception: pass
+        return
+
+    t_tcp = threading.Thread(target=_lan_tcp_server_loop, daemon=True, name="MoonLanTCP")
+    t_udp = threading.Thread(target=_lan_udp_loop, daemon=True, name="MoonLanUDP")
+    t_tcp.start()
+    t_udp.start()
+    LAN_TRIGGER_EVENT.set()
+
+def update_lan_skin_identity(username=None, version_dir=None):
+    """Updates the active user identity and profile version."""
+    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR
+    if username:
+        LAN_ACTIVE_USER = username
+    if version_dir:
+        LAN_ACTIVE_VERSION_DIR = version_dir
+    trigger_lan_skin_broadcast()
+
+def trigger_lan_skin_broadcast():
+    """Forces an immediate discovery probe across all LAN and Radmin networks."""
+    LAN_TRIGGER_EVENT.set()
+
+def stop_lan_skin_service():
+    """Stops the LAN Skin Sync daemon."""
+    global LAN_SYNC_RUNNING, LAN_TCP_SOCKET, LAN_UDP_SOCKET
+    LAN_SYNC_RUNNING = False
+    if LAN_TCP_SOCKET:
+        try: LAN_TCP_SOCKET.close()
+        except Exception: pass
+        LAN_TCP_SOCKET = None
+    if LAN_UDP_SOCKET:
+        try: LAN_UDP_SOCKET.close()
+        except Exception: pass
+        LAN_UDP_SOCKET = None
+
+def get_lan_skin_peers():
+    """Returns a list of currently detected LAN & Radmin peers."""
+    with LAN_PEERS_LOCK:
+        return [
+            {"username": k, **v}
+            for k, v in LAN_PEERS.items()
+        ]
+
+def handle_lan_command(args=None):
+    """CLI handler for /lan or /skin lan."""
+    box_w = 68
+    b_targets = get_broadcast_targets()
+    subnets = []
+    has_radmin = False
+    for t in b_targets:
+        if t.startswith("26."):
+            has_radmin = True
+        elif t != "255.255.255.255":
+            subnets.append(t)
+    
+    net_type = "WiFi / Local LAN"
+    if has_radmin:
+        net_type += " + Radmin VPN"
+
+    status_str = f"{C_GREEN}Active & Listening{CLR_RESET}" if LAN_SYNC_RUNNING else f"{C_RED}Stopped{CLR_RESET}"
+    _, own_hash = get_local_skin_payload(LAN_ACTIVE_USER)
+    skin_status = f"{C_GREEN}Loaded ({own_hash[:8]}...){CLR_RESET}" if own_hash else f"{C_AMBER}No local skin file{CLR_RESET}"
+
+    lines = [
+        f"{C_PURPLE}\033[1mMoon Launcher - Native LAN & Radmin Skin P2P Engine\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}* Service Status   :{CLR_RESET} {status_str}",
+        f"  {C_WHITE}* Network Subnets  :{CLR_RESET} {C_CYAN}{net_type}{CLR_RESET}",
+        f"  {C_WHITE}* UDP Broadcast Port:{CLR_RESET} {C_WHITE}{LAN_SYNC_UDP_PORT}{CLR_RESET} (Multi-Interface)",
+        f"  {C_WHITE}* TCP HTTP Port    :{CLR_RESET} {C_WHITE}{LAN_TCP_PORT or 'Offline'}{CLR_RESET}",
+        f"  {C_WHITE}* Active Username  :{CLR_RESET} {C_CYAN}{LAN_ACTIVE_USER or 'Unknown'}{CLR_RESET}",
+        f"  {C_WHITE}* Local Skin File  :{CLR_RESET} {skin_status}",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"{C_WHITE}\033[1mDISCOVERED PEERS (AUTO-SYNCED):\033[0m"
+    ]
+
+    peers = get_lan_skin_peers()
+    if not peers:
+        lines.append(f"  {C_MUTED}No other Moon Launcher players detected on LAN yet.{CLR_RESET}")
+        lines.append(f"  {C_MUTED}Peers will appear automatically when connected to WiFi or Radmin.{CLR_RESET}")
+    else:
+        for p in peers:
+            u = p["username"]
+            ip = p["ip"]
+            age = int(time.time() - p.get("last_seen", 0))
+            age_str = f"{age}s ago" if age < 60 else f"{age // 60}m ago"
+            lines.append(f"  {C_GREEN}* {u:<16}{CLR_RESET} {C_WHITE}IP: {ip:<15}{CLR_RESET} {C_MUTED}(Seen: {age_str}){CLR_RESET}")
+
+    lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+    lines.append(f"{C_MUTED}Commands: /lan sync (probe network) • /skin friend <name> <url>{CLR_RESET}")
+    print("\n" + render_box(lines, box_w, title="LAN & Radmin Skin Hub") + "\n")
+
+    if args and args[0].lower() in ("sync", "probe", "scan", "refresh"):
+        print(f"{C_CYAN}[Moon LAN] Broadcasting discovery beacon across all network interfaces...{CLR_RESET}")
+        trigger_lan_skin_broadcast()
+        time.sleep(0.5)
+        print(f"{C_GREEN}[Moon LAN] Probe complete!{CLR_RESET}\n")

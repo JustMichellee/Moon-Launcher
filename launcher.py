@@ -3060,6 +3060,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/friend ping <name>{CLR_RESET}     {C_MUTED}Check real-time server latency and online status{CLR_RESET}",
         f"  {C_CYAN}/server [list]{CLR_RESET}          {C_MUTED}Browse favorite servers with live player counts{CLR_RESET}",
         f"  {C_CYAN}/server add <name> <ip>{CLR_RESET} {C_MUTED}Save server to favorites list{CLR_RESET}",
+        f"  {C_CYAN}/lan [sync]{CLR_RESET}             {C_MUTED}View & probe LAN / Radmin peer skin auto-sync{CLR_RESET}",
         "",
         f"{C_WHITE}\033[1mMODPACK & VERSION MANAGEMENT\033[0m",
         f"  {C_CYAN}/install{CLR_RESET}                {C_MUTED}Open Modpack & Version Installer Studio{CLR_RESET}",
@@ -3117,6 +3118,9 @@ def print_status(version_dir, cfg):
     print(f"  Configured Min Memory  : {C_MUTED}{cfg['ram_min_gb']} GB (-Xms{cfg['ram_min_gb']}G){CLR_RESET}")
     rpc_st = f"{C_GREEN}Active & Synchronized{CLR_RESET}" if (GLOBAL_RPC and GLOBAL_RPC.connected) else f"{C_CYAN}Enabled{CLR_RESET}"
     print(f"  Discord Rich Presence  : {rpc_st}")
+    lan_count = len(network_hub.get_lan_skin_peers())
+    lan_st = f"{C_GREEN}Active & Listening ({lan_count} peers synced){CLR_RESET}" if network_hub.LAN_SYNC_RUNNING else f"{C_RED}Stopped{CLR_RESET}"
+    print(f"  LAN & Radmin Skin Sync : {lan_st}")
     c_diag = analyze_latest_crash(version_dir)
     if c_diag and c_diag.get('failure_message') and (time.time() - c_diag.get('mtime', 0)) < 86400:
         c_status_str = f"{C_AMBER}{c_diag['error_type']} ({c_diag['time']}){CLR_RESET}"
@@ -5492,6 +5496,9 @@ def main():
     )
     GLOBAL_RPC.set_menu(version_dir, cfg)
 
+    # Start Native Zero-Config LAN & Radmin P2P Skin Auto-Sync Service
+    network_hub.start_lan_skin_service(cfg.get('username', 'Player'), version_dir)
+
     # Process CLI arguments if passed (e.g. python launcher.py /play or /install homestead)
     if len(sys.argv) > 1:
         arg_cmd = sys.argv[1].lower()
@@ -5651,9 +5658,18 @@ def main():
                 if t_dir == version_dir:
                     cfg = repaired_cfg
 
+            elif cmd in ('/lan', 'lan', '/lanskin', 'lanskin'):
+                sub_args = raw_parts[1:]
+                if sub_args and sub_args[0].lower() in ('host', 'start', 'tunnel', 'open', 'stop'):
+                    network_hub.handle_host_command(sub_args, version_dir)
+                else:
+                    network_hub.handle_lan_command(sub_args)
+
             elif cmd in ('/skin', 'skin', '/customskin', 'customskin'):
                 sub_args = raw_parts[1:]
-                if not sub_args:
+                if sub_args and sub_args[0].lower() in ('lan', 'radmin', 'p2p', 'peers', 'sync'):
+                    network_hub.handle_lan_command(sub_args[1:])
+                elif not sub_args:
                     cur_s = cfg.get('custom_skin') or cfg.get('custom_skin_url') or 'Auto (from username)'
                     print(f"{C_CYAN}[Moon Launcher] Active Custom Skin:{CLR_RESET} {cur_s}")
                     print(f"{C_MUTED}Usage: /skin <https://... | file_path.png | PlayerName | auto>{CLR_RESET}")
@@ -5667,12 +5683,14 @@ def main():
                     skin_val = ' '.join(sub_args)
                     apply_skin_setting(version_dir, cfg, skin_val)
                     save_config(version_dir, cfg)
+                    network_hub.trigger_lan_skin_broadcast()
                     print()
 
             elif cmd in ('/user', 'user', '/username', 'username', '/player', 'player', '/name', 'name', '/nick', 'nick'):
                 if len(raw_parts) > 1:
                     new_u = set_global_username(raw_parts[1], version_dir)
                     cfg['username'] = new_u
+                    network_hub.update_lan_skin_identity(new_u, version_dir)
                     print(f"{C_GREEN}[Moon Launcher] Updated player username -> {new_u}{CLR_RESET}")
                     print(f"{C_MUTED}[Moon Launcher] Synchronized across all profiles and launch arguments.{CLR_RESET}\n")
                 else:
@@ -5746,6 +5764,7 @@ def main():
                 print_banner(version_dir, cfg)
 
             elif cmd in ('/exit', 'exit', '/quit', 'quit', '/q', 'q'):
+                network_hub.stop_lan_skin_service()
                 network_hub.stop_internet_tunnel()
                 if GLOBAL_RPC:
                     GLOBAL_RPC.close()
