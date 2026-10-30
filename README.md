@@ -8,15 +8,15 @@
  |_|  |_|\___/ \___/|_| |_|   |_____\__,_|\__,_|_| |_|\___|_| |_|\___|_|   
 ```
 
-# Moon Launcher & DeadZone Modpack
-### *Official Collaborative Project Edition*
+# 🌙 Moon Launcher
+### *High-Performance CLI Minecraft Launcher Studio*
 
-**An enterprise-grade, high-performance CLI Minecraft Launcher Studio paired with the curated DeadZone Zombie Apocalypse Modpack.**
+**A lightweight, privacy-focused, keyboard-driven Minecraft launcher built with pure Python standard libraries, native Discord Rich Presence, zero-config Anycast P2P multiplayer tunneling, universal skin synchronization, and intelligent diagnostics.**
 
 [![Collaboration](https://img.shields.io/badge/Collaborators-Epithap%20x%20alfianzidan321--cmd-blueviolet?style=for-the-badge&logo=github)](https://github.com/alfianzidan321-cmd/Moon-Launcher)
-[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20Forge-5B8C33?style=for-the-badge&logo=minecraft&logoColor=white)](https://minecraft.net)
-[![Mods Count](https://img.shields.io/badge/Installed_Mods-175+-E04E39?style=for-the-badge&logo=curseforge&logoColor=white)](mods/)
+[![Python](https://img.shields.io/badge/Python-3.8+_(Zero_Deps)-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Platform](https://img.shields.io/badge/Platform-Windows_(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](Moon-Launcher/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-Vanilla%20%7C%20Forge%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Quilt-5B8C33?style=for-the-badge&logo=minecraft&logoColor=white)](https://minecraft.net)
 [![Discord RPC](https://img.shields.io/badge/Discord-Rich_Presence_V2-5865F2?style=for-the-badge&logo=discord&logoColor=white)](Moon-Launcher/)
 [![Network Tunnel](https://img.shields.io/badge/Multiplayer-Anycast_P2P_Tunnel-00C7B7?style=for-the-badge&logo=cloudflare)](Moon-Launcher/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
@@ -30,7 +30,7 @@
         <img src="https://github.com/alfianzidan321-cmd.png?size=100" width="100px;" alt="alfianzidan321-cmd"/><br />
         <sub><b>alfianzidan321-cmd</b></sub>
       </a><br />
-      <sub><b>Project Lead & Modpack Curator</b></sub>
+      <sub><b>Project Lead & Repository Maintainer</b></sub>
     </td>
     <td align="center">
       <a href="https://github.com/Epithap">
@@ -49,15 +49,14 @@
 ## Table of Contents
 
 - [Overview](#-overview)
-- [Architecture & Key Highlights](#-architecture--key-highlights)
-  - [Moon Launcher Engine](#1-moon-launcher-engine-cli-studio)
-  - [DeadZone Modpack (175+ Mods)](#2-deadzone-modpack-hardcore-survival)
+- [Key Architectural Highlights](#-key-architectural-highlights)
 - [Repository Structure](#-repository-structure)
 - [System Requirements](#-system-requirements)
 - [Installation & Quick Start](#-installation--quick-start)
 - [Command Matrix & CLI Reference](#-command-matrix--cli-reference)
 - [Global Multiplayer & Anycast Tunneling](#-global-multiplayer--anycast-tunneling)
 - [Universal Skin & Cape System](#-universal-skin--cape-system)
+- [Modpack & Version Management Studio](#-modpack--version-management-studio)
 - [Diagnostics, Crash Watchdog & Self-Repair](#-diagnostics-crash-watchdog--self-repair)
 - [Troubleshooting & FAQ](#-troubleshooting--faq)
 - [Collaborators & Credits](#-collaborators--credits)
@@ -67,61 +66,50 @@
 
 ## 📖 Overview
 
-The **Moon Launcher & DeadZone Project** is a unified, collaborative gaming ecosystem engineered specifically for Minecraft enthusiasts who demand extreme performance, zero bloat, and a seamless survival experience.
+**Moon Launcher** is an ultra-fast, keyboard-driven Command Line Interface (CLI) Minecraft Launcher Studio engineered from the ground up for players, server hosts, and modders who prioritize raw performance, zero bloat, and total configuration autonomy.
 
-This repository bundles two major components:
+Traditional modern launchers suffer from sluggish web wrappers (Electron/Chromium), intrusive advertisements, opaque telemetry background services, and complex login hurdles. Moon Launcher redefines the experience by running on **pure Python standard library** with zero external pip dependencies—delivering lightning-fast sub-50ms boot times, seamless zero-config internet hosting, rich Discord Rich Presence, and automated client health diagnostics.
 
-1. **Moon Launcher Studio (`Moon-Launcher/`)**: A terminal-based, keyboard-driven Minecraft launcher built with pure Python standard libraries. It eliminates third-party dependencies, intrusive advertisements, telemetry tracking, and memory-heavy web wrappers, featuring built-in Anycast P2P tunneling, native Discord IPC Rich Presence, pre-flight diagnostics, and CustomSkinLoader integration.
-2. **DeadZone Modpack (`mods/`)**: A curated, meticulously balanced hardcore survival horror modpack for **Minecraft 1.20.1 Forge** featuring 175+ mods, modern modular firearm ballistics (Timeless and Classics Zero), realistic body thermoregulation, dynamic zombie AI swarms, procedural world generation, and an optimized modern rendering pipeline.
+Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt modpacks, or hosting LAN worlds for friends across the globe, Moon Launcher delivers an unmatched, streamlined desktop experience.
 
 ---
 
-## 🌟 Architecture & Key Highlights
+## 🌟 Key Architectural Highlights
 
-### 1. Moon Launcher Engine (CLI Studio)
+### 1. Pure Python Standard Library Architecture
+- **Zero Third-Party Dependencies**: No `pip install`, no wheel compiling, no external Python package maintenance. Runs directly out of the box on Python 3.8+.
+- **Zero Bloat & Telemetry**: No background telemetry daemons, no tracking, and no CPU/RAM overhead while Minecraft is running.
+- **Instantaneous Startup**: Cold-boots to the interactive CLI in under 50 milliseconds.
 
-- **Pure Python Standard Library Architecture**
-  - Runs out of the box using vanilla Python 3.8+ without requiring `pip install` or compiling C-extensions.
-  - Zero telemetry, zero telemetry bloat, and instantaneous startup times (< 50ms).
-- **Zero-Config Global P2P Anycast Tunneling (`/host`)**
-  - Built-in network tunneling daemon allowing you to host singleplayer worlds over the public Internet.
-  - No router port-forwarding, CGNAT circumvention issues, Radmin VPN, or Hamachi required.
-  - Automatically provisions a public Anycast DNS endpoint (e.g. `*.playit.gg:port`) that friends can paste directly into standard Minecraft multiplayer.
-- **Native Discord Rich Presence V2 (Direct Named Pipe IPC)**
-  - Direct communication with the Discord desktop client via `\\.\pipe\discord-ipc-0` without external wrappers.
-  - Dynamic game state tracking:
-    - **In Launcher**: Displays active profile, mod count, and configured memory.
-    - **Singleplayer**: Dynamically reads world folder names and NBT level data in real time.
-    - **Multiplayer**: Detects server addresses, LAN broadcasts, Radmin/Hamachi virtual subnets, and Anycast tunnels.
-    - **3D Head Avatars**: Automatically extracts and displays player skin head avatars in the Discord presence.
-    - **Modpack Logo & Fallback**: Automatically uploads local modpack logos to Discord; falls back to an animated grass icon when no logo is present.
-- **Universal Offline & Online Skin Integration (CustomSkinLoader CSL)**
-  - Fully configured CustomSkinLoader (CSL) deployed across all installed versions.
-  - Multi-provider skin pipeline prioritizing local cache (`skins/<username>.png`) with 0ms latency, backed by Mojang, TLauncher, ElyBy, LittleSkin, BlessingSkin, and MCHeads.
-  - Instant in-game skin switching via CLI (`/skin <url|file|player>`) and friend skin synchronization (`/skin friend <name> <url>`).
-- **Interactive Terminal UI & Management Suite**
-  - Unicode border-protected terminal studio with single-key shortcuts (`1` Play, `2` Settings, `3` Status, `4` Version, `5` Remove).
-  - Built-in Modrinth `.mrpack` archive downloader and installer simulating Linux Ubuntu APT progress (`Get:1`, `Unpacking`, `Setting up`).
-  - Automated pre-flight dry-run tests (`/test`), self-repair engine (`/fix`), and stack-trace crash analyzer (`/crash`).
+### 2. Zero-Config Global P2P Anycast Tunneling (`/host`)
+- **Play Singleplayer Worlds with Remote Friends**: Seamlessly host singleplayer / LAN worlds over the public Internet.
+- **No Port Forwarding Required**: Fully circumvents carrier-grade NAT (CGNAT), router firewall restrictions, and ISP blocks without router admin access.
+- **Zero Third-Party VPN Software**: Eliminates the need for Radmin VPN, Hamachi, or third-party virtual network adapters.
+- **Instant Public Anycast Endpoints**: Generates a public DNS domain (e.g. `*.playit.gg:port`) that remote players can paste directly into the standard Minecraft Multiplayer menu.
 
-### 2. DeadZone Modpack (Hardcore Survival)
+### 3. Native Discord Rich Presence V2 (Direct IPC Pipe)
+- **Direct IPC Named Pipe Engine**: Interacts directly with the local Discord client via Windows named pipe (`\\.\pipe\discord-ipc-0`) without requiring `pypresence` or third-party wrappers.
+- **Dynamic In-Game Detection**:
+  - 🏠 **Launcher Status**: Shows active profile, installed mod counts, and memory configuration.
+  - 🕹️ **Singleplayer Gameplay**: Dynamically inspects world folders and parses live NBT level data to display current world names.
+  - 🌐 **Multiplayer & Co-op**: Detects connected server IP addresses, LAN broadcasts, virtual networks, and active Anycast tunnels.
+  - 👤 **3D Player Head Avatars**: Automatically extracts and displays the player's skin head avatar directly in Discord.
+  - 🖼️ **Dynamic Modpack Logos**: Automatically uploads local profile icons (`icon.png`); defaults to a continuous animated grass icon if no custom logo is found.
 
-- **Modern Firearm Ballistics & Arsenal**
-  - **Timeless and Classics Zero (TaCZ)**: High-fidelity firearms with custom animations, attachment customization, recoil models, and projectile ballistics.
-  - Weapon expansion addons providing tactical gear, military scopes, suppressors, and specialized ammunition.
-- **Brutal Environmental Survival & AI**
-  - **Cold Sweat**: Hyperthermia and hypothermia mechanics tied to biomes, weather, altitude, and nearby thermal blocks.
-  - **Thirst Was Taken**: Hydration tracking requiring water purification, boiling, and hydration equipment.
-  - **Enhanced Zombie AI & Zombie Awareness**: Zombies track scent trails, respond to gunshots and block breaking, sprint in darkness, and coordinate horde sieges.
-- **Atmospheric Overhauls & Immersive Audio**
-  - **Terralith & Tectonic**: Dramatic procedural world generation featuring mountains, ravines, and diverse geological strata.
-  - **Biomes O' Plenty**: Vibrant biomes integrated with post-apocalyptic vegetation and ruined structures.
-  - **AmbientSounds & Sound Physics Remastered**: Dynamic reverberation in caves, muffled acoustics through walls, and realistic directional audio.
-- **Extreme High-FPS Performance Stack**
-  - **ModernFix**: Reduces JVM heap allocation and fixes vanilla memory leaks.
-  - **Embeddium**: High-performance Sodium-based rendering engine rewritten for Forge.
-  - **Canary & FerriteCore**: Optimized entity math, AI pathfinding algorithms, and compressed memory structures.
-  - **ImmediatelyFast & Entity Culling**: Rapid font/particle rendering and off-screen entity occlusion culling.
+### 4. Universal Offline & Online Skin Integration (CustomSkinLoader CSL)
+- **Universal Multi-Loader Deployment**: Automatically configures and deploys CustomSkinLoader across Forge, Fabric, NeoForge, and Quilt profiles.
+- **Local-First Zero-Latency Pipeline**: Resolves skins locally from `skins/<username>.png` with 0ms delay.
+- **Multi-Provider Fallback**: Seamlessly falls back to Mojang, TLauncher, ElyBy, LittleSkin, BlessingSkin, and MCHeads.
+- **Friend Skin Synchronization**: Set custom skins for yourself (`/skin <url|file|player>`) or assign skins to your multiplayer friends (`/skin friend <name> <url>`) so everyone sees custom skins in-game.
+
+### 5. Intelligent Diagnostics & Self-Repair Engine
+- **Pre-Flight Diagnostics (`/test`)**: Audits Java runtime compatibility (Java 8 vs 17 vs 21), verifies client JAR checksums, checks LWJGL native DLLs, and performs simulated dry-run boots.
+- **One-Click Auto-Repair (`/fix`)**: Automatically regenerates corrupted launch argument files, re-links missing native libraries, purges 0-byte corrupted mod JARs, and synchronizes CustomSkinLoader configurations.
+- **Crash Watchdog (`/crash`)**: Real-time process monitor that detects abnormal terminations, parses `crash-reports/` and `logs/latest.log`, and pinpoints the exact culprit mod JAR causing the failure.
+
+### 6. Interactive Terminal Studio & APT-Style Installer
+- **Border-Protected Unicode Dashboard**: Clean, responsive terminal UI with single-character quick access keys (`1` Play, `2` Settings, `3` Status, `4` Version, `5` Remove).
+- **Ubuntu APT-Styled Modpack Installer (`/install`)**: Search and download modpacks from Modrinth, install raw `.mrpack` files, or set up clean Forge, Fabric, NeoForge, or Vanilla runtimes with live terminal progress bars.
 
 ---
 
@@ -130,36 +118,31 @@ This repository bundles two major components:
 ```text
 Moon-Launcher/
 │
-├── Moon-Launcher/                     # Launcher engine source directory
-│   ├── launcher.py                    # Core engine, IPC pipe, networking & CLI
-│   ├── Moon Launcher.bat              # Launcher startup script (handles Python PATH)
-│   └── launcher_config.json           # Default engine configuration template
+├── launcher.py                    # Core engine, IPC pipe, Anycast tunnel & CLI studio
+├── Moon Launcher.bat              # 1-Click Launch Script (auto-detects Python environment)
+├── launcher_config.json           # User configuration (RAM, player, resolution, paths)
 │
-├── mods/                              # 175+ Curated Minecraft 1.20.1 Forge mod JARs
-│   ├── tacz-1.20.1-*.jar              # Timeless and Classics Zero firearm engine
-│   ├── embeddium-*.jar                # High-performance Sodium rendering port
-│   ├── modernfix-*.jar                # Memory leak and heap footprint optimizer
-│   ├── coldsweat-*.jar                # Body temperature and thermoregulation
-│   └── ...                            # Tracked seamlessly via Git LFS
+├── skins/                         # Local skin directory (0ms offline CustomSkinLoader cache)
+│   ├── Michelle.png               # Custom player skin template
+│   └── Alfian.png                 # Custom player skin template
 │
-├── skins/                             # Local skin storage for 0ms offline rendering
-│   ├── Michelle.png                   # Player skin template
-│   └── Alfian.png                     # Player skin template
+├── templates/                     # System templates and engine assets
+│   ├── CustomSkinLoader.json      # Universal multi-provider skin configuration
+│   └── CustomSkinLoader_*.jar     # Universal skin engine JAR
 │
-├── versions/                          # Minecraft versions directory
-│   └── DeadZone 1.20.1 Forge/         # Pre-configured DeadZone game profile
-│       ├── icon.png                   # Custom modpack Discord RPC logo
-│       ├── launch_args.txt            # Optimized JVM parameters
-│       ├── options.txt                # Curated control bindings and visual settings
-│       └── CustomSkinLoader/          # Universal offline skin configuration
+├── versions/                      # Minecraft version profiles directory
+│   ├── <Profile_Name>/            # Version directory (e.g. 1.20.1-Forge, Fabric-1.21)
+│   │   ├── icon.png               # Custom profile icon for Discord RPC
+│   │   ├── launch_args.txt        # Synchronized JVM parameters
+│   │   ├── mods/                  # Profile mod JARs
+│   │   ├── saves/                 # Singleplayer worlds
+│   │   └── options.txt            # Game preferences and keybindings
+│   └── ...
 │
-├── Moon Launcher.bat                  # Root 1-Click Launch Script
-├── launcher.py                        # Root launcher entrypoint
-├── launcher_config.json               # Active user profile and settings
-├── .gitattributes                     # Git LFS configuration for binary JAR files
-├── .gitignore                         # Exclusions for runtime caches, saves, and logs
-├── LICENSE                            # MIT Open-Source License
-└── README.md                          # Official documentation
+├── .gitattributes                 # Git LFS attributes for binaries
+├── .gitignore                     # Filter for temporary saves, logs, and caches
+├── LICENSE                        # MIT Open-Source License
+└── README.md                      # Official documentation
 ```
 
 ---
@@ -168,52 +151,49 @@ Moon-Launcher/
 
 | Component | Minimum Specification | Recommended Specification |
 |---|---|---|
-| **Operating System** | Windows 10 (64-bit, 1809+) | Windows 10 / 11 (64-bit, Latest) |
-| **Processor (CPU)** | Intel Core i5-4460 / AMD FX-8350 | Intel Core i5-11400 / AMD Ryzen 5 5600 or better |
-| **System Memory (RAM)** | 8 GB DDR3 / DDR4 | 16 GB DDR4 / DDR5 (Allocated: 8 GB - 12 GB) |
-| **Graphics Card (GPU)** | Intel UHD 630 / GeForce GT 1030 | NVIDIA GeForce GTX 1660 / AMD Radeon RX 580+ |
-| **Java Runtime** | Java 17 (64-bit) | Microsoft OpenJDK 17 or Eclipse Temurin 17 |
+| **Operating System** | Windows 10 (64-bit, 1809+) | Windows 10 / 11 (64-bit, Latest Build) |
+| **Processor (CPU)** | Intel Core i3 / AMD Ryzen 3 | Intel Core i5 / AMD Ryzen 5 or higher |
+| **System Memory (RAM)** | 4 GB RAM (Vanilla) / 8 GB (Modded) | 16 GB+ RAM (Configured: 6 GB - 10 GB) |
+| **Graphics Card (GPU)** | Intel HD Graphics 4000 / AMD Radeon | NVIDIA GeForce GTX 1050+ / AMD RX 560+ |
+| **Java Runtime** | Java 8 (for 1.12.2 and older) / Java 17+ (for 1.18+) | Microsoft OpenJDK 17/21 or Eclipse Temurin |
 | **Python** | Python 3.8 (64-bit) | Python 3.10+ (Checked *"Add python.exe to PATH"*) |
-| **Storage** | 8 GB free storage (HDD) | 12 GB free storage (NVMe / SSD recommended) |
+| **Disk Storage** | 200 MB for Launcher core | 5 GB+ for Minecraft profiles, assets & mods |
 
 ---
 
 ## 🚀 Installation & Quick Start
 
 ### 1. Prerequisites
-Ensure the following tools are installed on your Windows machine:
-1. **Python 3.8+**: Download from [python.org](https://www.python.org/). **Important:** Ensure *"Add python.exe to PATH"* is checked during setup.
-2. **Java 17 (64-bit)**: Download [Microsoft Build of OpenJDK 17](https://learn.microsoft.com/en-us/java/openjdk/download) or [Eclipse Temurin 17](https://adoptium.net/).
-3. **Git & Git LFS**: Download from [git-scm.com](https://git-scm.com/) and verify LFS is initialized:
-   ```bash
-   git lfs install
-   ```
+Ensure you have the following installed on Windows:
+1. **Python 3.8+**: Download from [python.org](https://www.python.org/). **Crucial:** Check *"Add python.exe to PATH"* during installation.
+2. **Java Runtime (64-bit)**: 
+   - Minecraft 1.18+: [Microsoft Build of OpenJDK 17](https://learn.microsoft.com/en-us/java/openjdk/download) or [OpenJDK 21](https://adoptium.net/).
+   - Minecraft 1.16.5 and older: Java 8 (64-bit).
+3. **Git**: Download from [git-scm.com](https://git-scm.com/) (Optional, for cloning).
 
-### 2. Clone the Repository
-Clone the repository and pull the 175+ mod files via Git LFS:
+### 2. Download / Clone the Repository
 ```bash
 git clone https://github.com/alfianzidan321-cmd/Moon-Launcher.git
 cd Moon-Launcher
-git lfs pull
 ```
 
-### 3. Launch the Studio
-Launch the engine by double-clicking:
+### 3. Launch Moon Launcher Studio
+Simply double-click the one-click runner script:
 ```cmd
 Moon Launcher.bat
 ```
-*Alternatively, run from PowerShell or Command Prompt:*
+*Or start directly from PowerShell / Command Prompt:*
 ```powershell
 python launcher.py
 ```
 
-### 4. Initial Configuration
-Configure your player identity and memory allocation inside the Moon Launcher CLI:
+### 4. Configure Your Profile & Launch
+Inside the interactive Moon Launcher terminal prompt, run:
 ```text
-/setting user YourPlayerName
-/setting ram 8
-/status
-/play
+/setting user YourPlayerName     -> Sets your in-game player name
+/setting ram 8                   -> Allocates 8 GB maximum JVM RAM
+/status                          -> Verifies Java runtime & profile status
+/play                            -> Launches Minecraft!
 ```
 
 ---
@@ -251,6 +231,8 @@ Moon Launcher features a comprehensive command-line interface. Commands can be i
 | `/install` | `<modpack_name>` | Search and install modpacks directly from Modrinth |
 | `/install` | `forge [version]` | Install clean Minecraft Forge (e.g. `1.20.1`, `1.12.2`) |
 | `/install` | `fabric [version]`| Install clean Fabric Loader (e.g. `1.20.1`, `1.21.1`) |
+| `/install` | `neoforge [v]`    | Install clean NeoForge Loader (e.g. `1.20.4`, `1.21.1`) |
+| `/install` | `quilt [version]` | Install clean Quilt Loader (e.g. `1.20.1`) |
 | `/install` | `vanilla [version]`| Install official vanilla Minecraft release |
 | `/remove` | `<name>` / `5` | Safely uninstall a modpack profile and reclaim disk storage space |
 
@@ -281,20 +263,29 @@ Moon Launcher features a comprehensive command-line interface. Commands can be i
 
 ## 🌐 Global Multiplayer & Anycast Tunneling
 
-Moon Launcher eliminates the traditional barriers of Minecraft multiplayer. You can host your singleplayer world for friends across the globe without paying for server hosting or configuring router NAT port-forwarding:
+Moon Launcher revolutionizes Minecraft multiplayer. You can host your singleplayer world for friends anywhere on earth without purchasing a server, port-forwarding your home router, or dealing with third-party VPN clients:
 
 ```
-[ Your Minecraft World ] ──> [ Moon Launcher Anycast Daemon ] ──> [ Global Anycast Edge ] ──> [ Remote Players ]
+┌──────────────────────┐          ┌───────────────────────────┐          ┌────────────────────────┐
+│ Your Local PC        │          │ Moon Launcher Tunnel      │          │ Global Anycast Edge    │
+│ Minecraft LAN World  ├─────────►│ P2P Anycast Daemon        ├─────────►│ Endpoints Worldwide    │
+└──────────────────────┘          └───────────────────────────┘          └───────────┬────────────┘
+                                                                                     │
+                                                                                     ▼
+                                                                         ┌────────────────────────┐
+                                                                         │ Remote Players Connect │
+                                                                         │ (Direct Connection IP) │
+                                                                         └────────────────────────┘
 ```
 
 ### Hosting a World in 4 Simple Steps:
 1. **Open World to LAN**: Inside Minecraft, pause the game and select **Open to LAN**. Note the 5-digit port (e.g. `52341`).
-2. **Start the Tunnel**: In Moon Launcher CLI, enter:
+2. **Start the Tunnel**: In Moon Launcher CLI, run:
    ```text
    /host start 52341
    ```
-   *(If you omit the port, Moon Launcher will automatically scan and detect your open LAN world).*
-3. **Copy the Public Address**: Moon Launcher provisions an encrypted Anycast endpoint:
+   *(If you omit the port, Moon Launcher will automatically scan and detect your open LAN world).* 
+3. **Obtain the Public Address**: Moon Launcher instantly allocates an encrypted Anycast endpoint:
    ```text
    Public Address: emerald-tiger.playit.gg:38921
    ```
@@ -304,92 +295,116 @@ Moon Launcher eliminates the traditional barriers of Minecraft multiplayer. You 
 
 ## 🎭 Universal Skin & Cape System
 
-Because offline/free Minecraft accounts are rejected by Mojang's official session server (returning HTTP 204), standard clients render default Steve or Alex skins. 
+In offline / non-premium Minecraft environments, Mojang's session server rejects authentication requests (HTTP 204), causing the game client to display default Steve or Alex skins.
 
-Moon Launcher resolves this using an integrated **CustomSkinLoader (CSL)** engine with an optimized local-first priority order:
+Moon Launcher permanently resolves this with a unified **CustomSkinLoader (CSL)** pipeline configured for high efficiency:
 
-1. **LocalSkin Engine (0ms Latency)**: Looks up `skins/<username>.png` directly in your launcher directory.
-2. **Mojang API**: Fetches official skins if the username matches an official paid account.
-3. **Third-Party Providers**: Queries fallback skin repositories including TLauncher, ElyBy, LittleSkin, BlessingSkin, and MCHeads.
+1. **LocalSkin Priority (0ms Latency)**: Prioritizes local textures located at `skins/<username>.png`.
+2. **Mojang Official API**: Automatically downloads skins for players using official premium usernames.
+3. **Multi-Provider Fallback**: Dynamically queries TLauncher, ElyBy, LittleSkin, BlessingSkin, and MCHeads repositories.
 
-### Changing Skins:
-- **Apply Your Own Skin**:
+### Setting Skins via CLI:
+- **Apply Skin from URL or Local PNG**:
   ```text
-  /skin https://example.com/my_skin.png
-  /skin C:\Users\Username\Downloads\custom_skin.png
+  /skin https://example.com/skin.png
+  /skin C:\Users\User\Pictures\skin.png
   /skin Notch
   ```
 - **Synchronize a Friend's Skin**:
   ```text
-  /skin friend Michelle https://example.com/michelle.png
+  /skin friend Michelle https://example.com/michelle_skin.png
+  ```
+
+---
+
+## 📦 Modpack & Version Management Studio
+
+Managing versions and modpacks in Moon Launcher is fast and intuitive:
+
+- **Install from Modrinth**:
+  ```text
+  /install Fabulously Optimized
+  /install Cobblemon
+  ```
+- **Install Clean Loaders**:
+  ```text
+  /install fabric 1.20.1
+  /install forge 1.20.1
+  /install neoforge 1.21.1
+  /install vanilla 1.20.1
+  ```
+- **Switch Active Version**:
+  Type `/version` to view an interactive menu of all installed profiles, or switch directly by name:
+  ```text
+  /version 1.20.1-Forge
+  ```
+- **Safely Uninstall a Version**:
+  ```text
+  /remove OldModpackName
   ```
 
 ---
 
 ## 🛡️ Diagnostics, Crash Watchdog & Self-Repair
 
-Moon Launcher includes active health-monitoring systems to prevent crashes before they happen:
+Moon Launcher incorporates automated health and debugging tools to eliminate crash guesswork:
 
 ```
-                   ┌────────────────────────────────────────┐
-                   │        Moon Launcher Diagnostics       │
-                   └───────────────────┬────────────────────┘
-                                       │
-        ┌──────────────────────────────┼──────────────────────────────┐
-        ▼                              ▼                              ▼
-  Java Compatibility             JAR Integrity                Crash Log Parser
-  (Java 8 vs 17 vs 21)         (Detects 0-byte mods)        (Identifies culprit mod)
+                      ┌────────────────────────────────────────┐
+                      │        Moon Launcher Diagnostics       │
+                      └───────────────────┬────────────────────┘
+                                          │
+          ┌───────────────────────────────┼───────────────────────────────┐
+          ▼                               ▼                               ▼
+    Java Check                     Asset Integrity                 Crash Log Parser
+  (Java 8 / 17 / 21)             (Detects 0-byte JARs)           (Identifies culprit mod)
 ```
 
-### Diagnostics Tools:
-- **Pre-Flight Test (`/test`)**: Verifies that your selected Java version matches the Minecraft loader requirements, verifies client libraries and LWJGL native binaries, and performs a simulated dry-run launch.
-- **Automated Repair (`/fix`)**: Re-creates missing `launch_args.txt`, repairs native library links, purges corrupt zero-byte mod JARs, and synchronizes CustomSkinLoader configuration templates.
-- **Crash Watchdog (`/crash`)**: Parses `crash-reports/` and `logs/latest.log` to extract the root exception and highlights the exact mod JAR responsible for a failure.
+### Diagnostic Tools:
+- **Pre-Flight Test (`/test`)**: Validates that your installed Java version matches your Minecraft release (e.g. Java 17+ for 1.18+, Java 8 for 1.12.2), checks native LWJGL libraries, and verifies memory syntax.
+- **Automated Self-Repair (`/fix`)**: Re-creates missing `launch_args.txt` parameter files, re-links native DLLs, deletes 0-byte corrupt JAR files, and synchronizes CustomSkinLoader configurations.
+- **Crash Watchdog (`/crash`)**: Parses `crash-reports/` and `logs/latest.log` to extract the exact stack trace and root cause, highlighting the specific mod file responsible.
 
 ---
 
 ## ❓ Troubleshooting & FAQ
 
-### Q1: The game crashes during launch with exit code 1 or -1
-- Type `/crash` in the launcher to view the automated stack trace analysis.
-- Run `/fix` to re-synchronize corrupted launch arguments and native libraries.
-- Run `/test` to verify your Java runtime version and mod JAR integrity.
+### Q1: The game crashes immediately upon launch with exit code 1 or -1
+- Type `/crash` to inspect the automated stack trace root cause.
+- Run `/fix` to re-synchronize launch arguments and native libraries.
+- Run `/test` to verify Java runtime compatibility and mod file integrity.
 
-### Q2: Mods are missing or Minecraft launches in vanilla mode
-- Verify that your active profile is set to `DeadZone 1.20.1 Forge` using `/version`.
-- If you recently cloned the repository, ensure Git LFS pulled the actual mod JAR files:
-  ```bash
-  git lfs pull
-  ```
+### Q2: What Java runtime should I use?
+- **Minecraft 1.18 to 1.21+**: Requires **Java 17 (64-bit)** or **Java 21 (64-bit)**.
+- **Minecraft 1.12.2 and older**: Requires **Java 8 (64-bit)**.
+- You can check your active Java status anytime via `/status`.
 
-### Q3: How much RAM should I allocate for DeadZone?
-- DeadZone includes 175+ mods, high-resolution textures, and complex AI pathfinding.
-- **Recommended**: 8 GB to 10 GB:
-  ```text
-  /setting ram 8
-  ```
-- Avoid allocating more than 14 GB, as excessive JVM heap sizes can cause garbage collection stutter.
+### Q3: How much RAM should I allocate?
+- **Vanilla Minecraft**: 2 GB to 4 GB (`/setting ram 4`).
+- **Light to Medium Modpacks (50 - 120 mods)**: 4 GB to 6 GB (`/setting ram 6`).
+- **Heavy Modpacks (150+ mods / Shaders)**: 8 GB to 10 GB (`/setting ram 8`).
+- *Tip: Avoid allocating more than 14 GB unless strictly necessary to prevent JVM garbage collector pauses.*
 
 ### Q4: Windows Defender or Antivirus flags `Moon Launcher.bat`
-- `Moon Launcher.bat` is a simple three-line batch script that checks if Python is installed and executes `launcher.py`. You can inspect its contents in Notepad. It contains zero obfuscated binaries or network downloaders.
+- `Moon Launcher.bat` is a simple three-line batch script that verifies Python is in your PATH and starts `launcher.py`. You can inspect its source code in any text editor. It contains zero obfuscated binaries or downloaders.
 
----
+--- 
 
 ## 👥 Collaborators & Credits
 
-The **Moon Launcher & DeadZone Project** is maintained through active collaboration:
+**Moon Launcher** is an actively maintained open-source collaborative project:
 
 | Collaborator | GitHub Profile | Primary Responsibilities |
 |---|---|---|
-| **alfianzidan321-cmd** | [@alfianzidan321-cmd](https://github.com/alfianzidan321-cmd) | Project Founder, DeadZone Modpack Lead, Gameplay Balancing, Asset Curation |
-| **Epithap** | [@Epithap](https://github.com/Epithap) | Core Systems Architect, Moon Launcher CLI Engine, Discord IPC Pipe, Anycast Tunnel Integration |
+| **alfianzidan321-cmd** | [@alfianzidan321-cmd](https://github.com/alfianzidan321-cmd) | Project Lead, Repository Maintainer, UI/UX Design, Testing |
+| **Epithap** | [@Epithap](https://github.com/Epithap) | Core Systems Architect, Launcher Engine, Discord IPC Pipe, Anycast Tunnel Integration |
 
 ### Upstream Open-Source Acknowledgments:
-- **[CustomSkinLoader](https://github.com/xfl03/MCCustomSkinLoader)** — Universal offline/online skin rendering engine.
-- **[Timeless and Classics Zero (TaCZ)](https://github.com/Mayday-Memory/Timeless-and-Classics-Zero)** — Modern modular firearm combat framework.
-- **[Embeddium](https://github.com/embeddedt/embeddium)** & **[ModernFix](https://github.com/embeddedt/modernfix)** — Core optimization and memory performance infrastructure.
+- **[CustomSkinLoader](https://github.com/xfl03/MCCustomSkinLoader)** — Universal offline & multi-provider skin rendering engine.
+- **[Playit.gg](https://playit.gg/)** — Zero-configuration Anycast TCP/UDP tunnel network infrastructure.
+- **[Modrinth API](https://docs.modrinth.com/)** — Open-source modpack and version discovery platform.
 
----
+--- 
 
 ## 📜 License
 
