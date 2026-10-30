@@ -1,6 +1,6 @@
 {
   "version": "2.4.2",
-  "commit_sha": "cb7932f",
+  "commit_sha": "2895b3d",
   "branch": "main",
   "updated_at": "2026-10-30 17:38:31",
   "release_notes": "feat: auto-updater engine, P2P custom modpack sync, 1-click friend join, and pixel-perfect UI boxes"
