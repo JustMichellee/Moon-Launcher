@@ -118,29 +118,24 @@ Whether launching vanilla releases, heavily modded Forge/Fabric/NeoForge/Quilt m
 ```text
 Moon-Launcher/
 │
-├── launcher.py                    # Core engine, IPC pipe, Anycast tunnel & CLI studio
-├── Moon Launcher.bat              # 1-Click Launch Script (auto-detects Python environment)
-├── launcher_config.json           # User configuration (RAM, player, resolution, paths)
+├── launcher.py                    # Core launcher engine, Discord IPC & CLI studio
+├── Moon Launcher.bat              # 1-Click Launch Script (detects Python environment)
+├── launcher_config.json           # Launcher configuration (RAM, player, resolution, paths)
 │
-├── skins/                         # Local skin directory (0ms offline CustomSkinLoader cache)
-│   ├── JustMichellee.png          # Custom player skin template
-│   └── Alex.png                   # Default skin template
-│
-├── templates/                     # System templates and engine assets
+├── templates/                     # CustomSkinLoader templates & launcher assets
 │   ├── CustomSkinLoader.json      # Universal multi-provider skin configuration
-│   └── CustomSkinLoader_*.jar     # Universal skin engine JAR
+│   └── CustomSkinLoader_*.jar     # Universal skin engine runtime library
 │
 ├── versions/                      # Minecraft version profiles directory
-│   ├── <Profile_Name>/            # Version directory (e.g. 1.20.1-Forge, Fabric-1.21)
-│   │   ├── icon.png               # Custom profile icon for Discord RPC
-│   │   ├── launch_args.txt        # Synchronized JVM parameters
-│   │   ├── mods/                  # Profile mod JARs
-│   │   ├── saves/                 # Singleplayer worlds
-│   │   └── options.txt            # Game preferences and keybindings
-│   └── ...
+│   └── <Profile_Name>/            # Version directory (e.g. Forge, Fabric, NeoForge, Vanilla)
+│       ├── icon.png               # Custom profile icon for Discord RPC (optional)
+│       ├── launch_args.txt        # Synchronized JVM launch parameters
+│       ├── mods/                  # Installed mod JARs
+│       ├── saves/                 # Singleplayer world saves
+│       └── options.txt            # Minecraft options and keybindings
 │
-├── .gitattributes                 # Git LFS attributes for binaries
-├── .gitignore                     # Filter for temporary saves, logs, and caches
+├── .gitattributes                 # Git LFS tracking configuration
+├── .gitignore                     # Git filter for caches, saves, and runtime logs
 ├── LICENSE                        # MIT Open-Source License
 └── README.md                      # Official documentation
 ```
@@ -312,7 +307,7 @@ Moon Launcher permanently resolves this with a unified **CustomSkinLoader (CSL)*
   ```
 - **Synchronize a Friend's Skin**:
   ```text
-  /skin friend JustMichellee https://example.com/michelle_skin.png
+  /skin friend Alex https://example.com/alex_skin.png
   ```
 
 ---
