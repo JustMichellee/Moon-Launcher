@@ -57,18 +57,33 @@ def get_visible_width(text):
     return len(strip_ansi(text))
 
 def render_box(lines, width=68, title=None):
+    content_lines = []
+    for l in lines:
+        s = strip_ansi(str(l)).strip()
+        is_div = len(s) > 0 and all(c in '─-=' for c in s)
+        if not is_div:
+            content_lines.append(l)
+
+    t_len = get_visible_width(f" {title} ") if title else 0
+    max_c_w = max([get_visible_width(l) for l in content_lines] + [t_len + 2, width - 4])
+    width = max(width, max_c_w + 4)
+
     top = f"{C_BORDER}╭{'─' * (width - 2)}╮{CLR_RESET}"
     bottom = f"{C_BORDER}╰{'─' * (width - 2)}╯{CLR_RESET}"
     out = [top]
     if title:
         v_title = f" {title} "
-        t_len = get_visible_width(v_title)
         out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 4 - t_len)}╮{CLR_RESET}"
 
     for l in lines:
-        v_w = get_visible_width(l)
-        pad = max(0, width - 4 - v_w)
-        out.append(f"{C_BORDER}│{CLR_RESET}  {l}{' ' * pad}{C_BORDER}│{CLR_RESET}")
+        s = strip_ansi(str(l)).strip()
+        if len(s) > 0 and all(c in '─-=' for c in s):
+            # Dynamic separator line matching exact box width with T-junctions
+            out.append(f"{C_BORDER}├{'─' * (width - 2)}┤{CLR_RESET}")
+        else:
+            v_w = get_visible_width(l)
+            pad = max(0, width - 4 - v_w)
+            out.append(f"{C_BORDER}│{CLR_RESET}  {l}{' ' * pad}{C_BORDER}│{CLR_RESET}")
     out.append(bottom)
     return "\n".join(out)
 
@@ -292,14 +307,7 @@ def add_friend_from_invite(invite, data=None):
 def load_network_data():
     if not os.path.exists(FRIENDS_FILE):
         default_data = {
-            "friends": [
-                {
-                    "username": "Michelle",
-                    "address": "",
-                    "note": "Primary Profile",
-                    "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                }
-            ],
+            "friends": [],
             "servers": [
                 {
                     "name": "Hypixel Network",
@@ -318,7 +326,13 @@ def load_network_data():
 
     try:
         with open(FRIENDS_FILE, "r", encoding="utf-8-sig") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "friends" in data:
+                cleaned = [f for f in data["friends"] if f.get("note") != "Primary Profile" and f.get("username") != "Michelle"]
+                if len(cleaned) != len(data["friends"]):
+                    data["friends"] = cleaned
+                    save_network_data(data)
+            return data
     except Exception:
         return {"friends": [], "servers": []}
 
@@ -619,13 +633,26 @@ def handle_friend_command(args, active_version_dir=None):
     - /friend note <name> <text>
     """
     data = load_network_data()
-    friends = data.get("friends", [])
+    raw_friends = data.get("friends", [])
+
+    # Filter out current active username so players never see their own profile in friends list
+    my_uname = ""
+    try:
+        import launcher
+        my_uname = launcher.load_config().get("username", "").strip().lower()
+    except Exception:
+        pass
+
+    friends = [
+        f for f in raw_friends
+        if f.get("username", "").strip().lower() != my_uname and f.get("note") != "Primary Profile"
+    ]
 
     if not args or args[0].lower() in ("list", "ls", "show"):
         # Display Friends Table
         box_w = 68
         lines = [
-            f"{C_WHITE}\033[1mPlayer Friends & Mabar Contacts\033[0m",
+            f"{C_WHITE}[1mPlayer Friends & Mabar Contacts[0m",
             f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
         ]
 
@@ -642,22 +669,35 @@ def handle_friend_command(args, active_version_dir=None):
                 status_tag = f"{C_MUTED}[OFFLINE]{CLR_RESET}"
                 ping_detail = f"{C_MUTED}No Address{CLR_RESET}"
 
-                if addr:
+                peer_meta = None
+                with LAN_PEERS_LOCK:
+                    peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == u_name.lower()), None)
+
+                if peer_meta and peer_meta.get("version_name"):
+                    v_name = peer_meta.get("version_name")
+                    m_cnt = peer_meta.get("mod_count", 0)
+                    status_tag = f"{C_GREEN}[PLAYING]{CLR_RESET}"
+                    ping_detail = f"{C_WHITE}{v_name}{CLR_RESET} ({m_cnt} mods)"
+                elif addr:
                     p_res = ping_minecraft_server(addr, timeout=1.2)
                     if p_res["online"]:
-                        status_tag = f"{C_GREEN}[ONLINE]{CLR_RESET}"
+                        status_tag = f"{C_GREEN}[ONLINE ]{CLR_RESET}"
                         ping_detail = f"{C_GREEN}{p_res['latency']}ms{CLR_RESET} ({p_res['players_online']} players)"
                     else:
-                        status_tag = f"{C_RED}[IDLE]{CLR_RESET}"
+                        status_tag = f"{C_RED}[IDLE   ]{CLR_RESET}"
                         ping_detail = f"{C_MUTED}{addr}{CLR_RESET}"
 
-                name_col = f"{C_CYAN}{u_name}{CLR_RESET}"
-                lines.append(f"  {status_tag} {name_col:<20} {ping_detail}")
+                u_name_padded = f"{u_name:<16}"
+                name_col = f"{C_CYAN}{u_name_padded}{CLR_RESET}"
+                lines.append(f"  {status_tag} {name_col} {ping_detail}")
+                if peer_meta and peer_meta.get("version_name"):
+                    lines.append(f"     {C_CYAN}↳ Join: Type /friend join {u_name}{CLR_RESET}")
                 if note:
                     lines.append(f"     {C_MUTED}* Note: {note}{CLR_RESET}")
 
         lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
-        lines.append(f"{C_MUTED}Commands: /friend join <name> • /friend sync <name> • /friend invite • /friend add{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: {C_WHITE}/friend join <name>{C_MUTED} • {C_WHITE}/friend sync <name>{CLR_RESET}")
+        lines.append(f"{C_MUTED}          {C_WHITE}/friend invite{C_MUTED}      • {C_WHITE}/friend add <link>{CLR_RESET}")
         print("\n" + render_box(lines, box_w, title="Friends Hub") + "\n")
         return
 
