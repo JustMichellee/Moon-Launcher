@@ -3055,6 +3055,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/host scan{CLR_RESET}              {C_MUTED}Auto-discover open worlds on local network/LAN{CLR_RESET}",
         f"  {C_CYAN}/invite{CLR_RESET}                     {C_MUTED}Generate & copy 1-click multiplayer invite link{CLR_RESET}",
         f"  {C_CYAN}/friend [list]{CLR_RESET}          {C_MUTED}View friends, live status, ping, and notes{CLR_RESET}",
+        f"  {C_CYAN}/friend join <name>{CLR_RESET}     {C_MUTED}Auto-sync friend's custom modpack & join game{CLR_RESET}",
         f"  {C_CYAN}/friend add <link>{CLR_RESET}      {C_MUTED}Add friend instantly by pasting their invite link{CLR_RESET}",
         f"  {C_CYAN}/friend invite{CLR_RESET}          {C_MUTED}Create shareable link (attaches live /host IP){CLR_RESET}",
         f"  {C_CYAN}/friend ping <name>{CLR_RESET}     {C_MUTED}Check real-time server latency and online status{CLR_RESET}",
@@ -3616,6 +3617,16 @@ def launch_game(version_dir, cfg):
     full_cmd = [j_path] + launch_args
     if cfg.get('fullscreen', False):
         full_cmd.append('--fullscreen')
+    if cfg.get('server'):
+        full_cmd.extend(['--server', str(cfg['server'])])
+        if cfg.get('port'):
+            full_cmd.extend(['--port', str(cfg['port'])])
+        cfg.pop('server', None)
+        cfg.pop('port', None)
+        try:
+            save_config(cfg)
+        except Exception:
+            pass
 
     v_name = cfg.get('version_name', os.path.basename(version_dir))
     v_info = detect_version_info(version_dir, v_name)
@@ -5705,6 +5716,9 @@ def main():
 
             elif cmd in ('/friend', 'friend', '/friends', 'friends'):
                 network_hub.handle_friend_command(raw_parts[1:], version_dir)
+
+            elif cmd in ('/join', 'join', '/mabar', 'mabar'):
+                network_hub.handle_friend_command(['join'] + raw_parts[1:], version_dir)
 
             elif (cmd.startswith(('moon://', 'http://', 'https://')) or 'user=' in user_input) and network_hub.parse_friend_invite(user_input):
                 network_hub.handle_friend_command(['add', user_input], version_dir)

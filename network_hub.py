@@ -657,7 +657,7 @@ def handle_friend_command(args, active_version_dir=None):
                     lines.append(f"     {C_MUTED}* Note: {note}{CLR_RESET}")
 
         lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
-        lines.append(f"{C_MUTED}Commands: /friend invite • /friend add <link> • /friend ping <name>{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /friend join <name> • /friend sync <name> • /friend invite • /friend add{CLR_RESET}")
         print("\n" + render_box(lines, box_w, title="Friends Hub") + "\n")
         return
 
@@ -842,6 +842,98 @@ def handle_friend_command(args, active_version_dir=None):
             print(f"\n{C_GREEN}[OK] Note updated for '{matched['username']}': {note_txt}{CLR_RESET}\n")
         else:
             print(f"\n{C_AMBER}Friend '{args[1]}' not found in contacts.{CLR_RESET}\n")
+    # /friend join <name> or /friend sync <name>
+    elif sub in ("join", "sync", "mabar", "connect"):
+        if len(args) < 2:
+            print(f"\n{C_RED}Usage: /friend {sub} <username>{CLR_RESET}\n")
+            return
+        target_name = args[1].strip()
+        peer_ip = None
+        peer_port = None
+        peer_ver = None
+        peer_srv = None
+        
+        with LAN_PEERS_LOCK:
+            for uname, p in LAN_PEERS.items():
+                if uname.lower() == target_name.lower():
+                    peer_ip = p.get("ip")
+                    peer_port = p.get("port")
+                    peer_ver = p.get("version_name")
+                    peer_srv = p.get("server_addr")
+                    break
+                    
+        matched_friend = next((f for f in friends if f.get("username", "").lower() == target_name.lower()), None)
+        if not peer_ip and matched_friend and matched_friend.get("address"):
+            addr_parts = matched_friend["address"].split(":")
+            peer_ip = addr_parts[0]
+            peer_port = 25570
+            peer_srv = matched_friend["address"]
+            
+        if not peer_ip:
+            print(f"\n{C_AMBER}Friend '{target_name}' is not currently detected online via LAN/Radmin.{CLR_RESET}")
+            print(f"{C_MUTED}Make sure both of you have Moon Launcher open on the same network.{CLR_RESET}\n")
+            return
+            
+        box_w = 68
+        try:
+            req = urllib.request.Request(f"http://{peer_ip}:{peer_port}/modpack/info", headers={"User-Agent": "Moon-Launcher/1.0"})
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                peer_info = json.loads(resp.read().decode('utf-8'))
+        except Exception as e:
+            print(f"\n{C_RED}[Moon P2P] Failed to connect to {target_name}'s launcher: {e}{CLR_RESET}\n")
+            return
+            
+        v_name = peer_info.get("version_name", "Unknown Modpack")
+        mc_ver = peer_info.get("mc_version", "1.20.1")
+        loader = peer_info.get("loader", "Forge")
+        mod_cnt = peer_info.get("mod_count", 0)
+        srv_target = peer_srv or peer_info.get("server_addr") or f"{peer_ip}:25565"
+        if srv_target.startswith(":"):
+            srv_target = f"{peer_ip}{srv_target}"
+            
+        info_lines = [
+            f"{C_WHITE}\033[1mFriend Game Session Detected\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Player Name    :{CLR_RESET} {C_CYAN}{target_name}{CLR_RESET}",
+            f"  {C_WHITE}* Active Modpack :{CLR_RESET} {C_WHITE}\033[1m{v_name}\033[0m ({loader} {mc_ver})",
+            f"  {C_WHITE}* Total Mods     :{CLR_RESET} {C_AMBER}{mod_cnt} mods installed{CLR_RESET}",
+            f"  {C_WHITE}* Target Server  :{CLR_RESET} {C_GREEN}{srv_target}{CLR_RESET}",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+        print("\n" + render_box(info_lines, box_w, title="Friend Multiplayer") + "\n")
+        
+        v_dir = os.path.join(BASE_DIR, "versions", v_name)
+        needs_sync = not os.path.exists(v_dir) or not os.path.exists(os.path.join(v_dir, "mods"))
+        
+        if needs_sync:
+            print(f"{C_AMBER}[Moon P2P] Custom modpack '{v_name}' is not installed on your PC.{CLR_RESET}")
+            ans = input(f"{C_WHITE}Request and download custom modpack directly from {target_name}? [Y/n]: {CLR_RESET}").strip().lower()
+            if ans not in ('', 'y', 'yes'):
+                print(f"{C_MUTED}Sync cancelled.{CLR_RESET}\n")
+                return
+            v_dir = sync_modpack_from_peer(peer_ip, peer_port)
+            if not v_dir:
+                print(f"{C_RED}[Moon P2P] Transfer failed! Cannot join.{CLR_RESET}\n")
+                return
+        elif sub == "sync":
+            v_dir = sync_modpack_from_peer(peer_ip, peer_port)
+            
+        if sub == "sync":
+            print(f"{C_GREEN}[OK] Modpack '{v_name}' is up to date!{CLR_RESET}\n")
+            return
+            
+        import launcher
+        cfg = launcher.load_config()
+        cfg['version_name'] = v_name
+        cfg['server'] = srv_target.split(":")[0]
+        if ":" in srv_target:
+            try: cfg['port'] = int(srv_target.split(":")[1])
+            except Exception: pass
+        launcher.save_config(cfg)
+        
+        print(f"\n{C_GREEN}Launching {v_name} and joining {target_name} at {srv_target}...{CLR_RESET}\n")
+        launcher.launch_game(v_dir, cfg)
+
     else:
         print(f"\n{C_RED}Unknown friend command. Available: list, invite, add, remove, ping, note{CLR_RESET}\n")
 
@@ -1135,31 +1227,196 @@ def distribute_peer_skin(peer_username, skin_bytes, version_dir=None):
     except Exception:
         return False
 
+
+def get_active_modpack_manifest(v_dir=None):
+    """Scans and generates a file manifest of the active modpack (mods and configs)."""
+    target = v_dir or LAN_ACTIVE_VERSION_DIR
+    if not target or not os.path.exists(target):
+        return None
+    v_name = os.path.basename(target)
+    mods_dir = os.path.join(target, "mods")
+    config_dir = os.path.join(target, "config")
+    
+    files = []
+    total_size = 0
+    if os.path.exists(mods_dir):
+        for f in sorted(os.listdir(mods_dir)):
+            if f.endswith('.jar'):
+                fp = os.path.join(mods_dir, f)
+                sz = os.path.getsize(fp)
+                files.append({"path": f"mods/{f}", "size": sz})
+                total_size += sz
+
+    if os.path.exists(config_dir):
+        for root, dirs, f_list in os.walk(config_dir):
+            for f in f_list:
+                fp = os.path.join(root, f)
+                rel = os.path.relpath(fp, target).replace("\\", "/")
+                sz = os.path.getsize(fp)
+                files.append({"path": rel, "size": sz})
+                total_size += sz
+
+    mc_ver = "1.20.1"
+    loader = "Forge"
+    cfg_file = os.path.join(target, "launcher_config.json")
+    if os.path.exists(cfg_file):
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as cf:
+                d = json.load(cf)
+                mc_ver = d.get("mc_version", mc_ver)
+                loader = d.get("loader", loader)
+        except Exception:
+            pass
+
+    return {
+        "version_name": v_name,
+        "mc_version": mc_ver,
+        "loader": loader,
+        "mod_count": len([i for i in files if i["path"].startswith("mods/")]),
+        "total_files": len(files),
+        "total_size": total_size,
+        "files": files
+    }
+
+def sync_modpack_from_peer(peer_ip, peer_port, versions_root=None):
+    """
+    Connects to peer P2P server, requests active modpack manifest,
+    and selectively downloads missing/updated mods and configs with a live progress bar.
+    """
+    v_root = versions_root or os.path.join(BASE_DIR, "versions")
+    base_url = f"http://{peer_ip}:{peer_port}"
+    
+    try:
+        req = urllib.request.Request(f"{base_url}/modpack/manifest", headers={"User-Agent": "Moon-Launcher/1.0"})
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            manifest = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"\n{C_RED}[Moon P2P] Could not reach friend's launcher on {base_url}: {e}{CLR_RESET}\n")
+        return None
+        
+    v_name = manifest.get("version_name")
+    if not v_name:
+        return None
+        
+    target_v_dir = os.path.join(v_root, v_name)
+    os.makedirs(target_v_dir, exist_ok=True)
+    
+    files = manifest.get("files", [])
+    to_download = []
+    download_bytes = 0
+    for item in files:
+        rel = item["path"]
+        sz = item["size"]
+        dest = os.path.join(target_v_dir, rel.replace("/", os.sep))
+        if not os.path.exists(dest) or os.path.getsize(dest) != sz:
+            to_download.append((rel, sz, dest))
+            download_bytes += sz
+            
+    print(f"\n{C_CYAN}[Moon P2P] Syncing custom modpack '{v_name}' ({len(to_download)} files to download, {download_bytes / (1024*1024):.1f} MB)...{CLR_RESET}")
+    
+    transferred = 0
+    t0 = time.time()
+    for idx, (rel, sz, dest) in enumerate(to_download, 1):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        f_url = f"{base_url}/modpack/file?path={urllib.parse.quote(rel)}"
+        req = urllib.request.Request(f_url, headers={"User-Agent": "Moon-Launcher/1.0"})
+        with urllib.request.urlopen(req, timeout=30.0) as resp:
+            with open(dest, "wb") as f_out:
+                while chunk := resp.read(65536):
+                    f_out.write(chunk)
+                    transferred += len(chunk)
+                    
+        pct = min(100, int((transferred / max(1, download_bytes)) * 100))
+        speed = (transferred / max(0.1, time.time() - t0)) / (1024 * 1024)
+        bar_len = 24
+        filled = int(bar_len * (pct / 100))
+        bar = "█" * filled + "░" * (bar_len - filled)
+        print(f"\r  [{C_GREEN}{bar}{CLR_RESET}] {pct}% ({transferred / (1024*1024):.1f}/{download_bytes / (1024*1024):.1f} MB, {speed:.1f} MB/s) {os.path.basename(rel)[:24]:<24}", end="", flush=True)
+        
+    print(f"\n{C_GREEN}[Moon P2P] Modpack '{v_name}' successfully synchronized!{CLR_RESET}\n")
+    return target_v_dir
+
 def _lan_tcp_server_loop():
-    """Lightweight HTTP server serving local player skin to requesting peers."""
+    """Lightweight HTTP server serving player skins and P2P modpack sync to peers."""
     global LAN_TCP_SOCKET, LAN_TCP_PORT, LAN_SYNC_RUNNING
     while LAN_SYNC_RUNNING and LAN_TCP_SOCKET:
         try:
             conn, addr = LAN_TCP_SOCKET.accept()
-            req = conn.recv(1024).decode('utf-8', errors='ignore')
+            req = conn.recv(2048).decode('utf-8', errors='ignore')
             lines = req.splitlines()
             if lines and lines[0].startswith("GET"):
                 path = lines[0].split()[1] if len(lines[0].split()) > 1 else ""
-                target_user = LAN_ACTIVE_USER
+                
                 if path.startswith("/skin/"):
+                    target_user = LAN_ACTIVE_USER
                     req_u = path.split("/skin/")[1].strip()
                     if req_u and req_u != "raw":
                         target_user = req_u.replace(".png", "")
-                
-                skin_data, _ = get_local_skin_payload(target_user)
-                if skin_data:
-                    resp = (
-                        b"HTTP/1.1 200 OK\r\n"
-                        b"Content-Type: image/png\r\n"
-                        b"Content-Length: " + str(len(skin_data)).encode() + b"\r\n"
-                        b"Connection: close\r\n\r\n" + skin_data
-                    )
-                    conn.sendall(resp)
+                    skin_data, _ = get_local_skin_payload(target_user)
+                    if skin_data:
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: image/png\r\n"
+                            b"Content-Length: " + str(len(skin_data)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + skin_data
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path == "/modpack/info":
+                    m = get_active_modpack_manifest()
+                    if m:
+                        t_status = get_tunnel_status()
+                        pub_addr = t_status.get("public_address") if t_status.get("running") else None
+                        active_port = detect_active_minecraft_port(LAN_ACTIVE_VERSION_DIR)
+                        info_body = json.dumps({
+                            "status": "ok",
+                            "user": LAN_ACTIVE_USER,
+                            "version_name": m["version_name"],
+                            "mc_version": m["mc_version"],
+                            "loader": m["loader"],
+                            "mod_count": m["mod_count"],
+                            "total_size": m["total_size"],
+                            "server_addr": pub_addr or (f"{addr[0]}:{active_port}" if active_port else "")
+                        }).encode('utf-8')
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/json\r\n"
+                            b"Content-Length: " + str(len(info_body)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + info_body
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path == "/modpack/manifest":
+                    m = get_active_modpack_manifest()
+                    if m:
+                        body = json.dumps(m).encode('utf-8')
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/json\r\n"
+                            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + body
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path.startswith("/modpack/file?path="):
+                    rel = urllib.parse.unquote(path.split("path=", 1)[1].strip())
+                    if LAN_ACTIVE_VERSION_DIR:
+                        safe_rel = os.path.normpath(rel).lstrip(r"\/")
+                        target_file = os.path.join(LAN_ACTIVE_VERSION_DIR, safe_rel)
+                        if os.path.commonpath([LAN_ACTIVE_VERSION_DIR, target_file]) == LAN_ACTIVE_VERSION_DIR and os.path.isfile(target_file):
+                            sz = os.path.getsize(target_file)
+                            hdr = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {sz}\r\nConnection: close\r\n\r\n".encode()
+                            conn.sendall(hdr)
+                            with open(target_file, "rb") as f_in:
+                                while chunk := f_in.read(65536):
+                                    conn.sendall(chunk)
+                        else:
+                            conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
                 else:
                     conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
             conn.close()
@@ -1180,11 +1437,20 @@ def _lan_udp_loop():
             last_broadcast = now
             _, my_hash = get_local_skin_payload(LAN_ACTIVE_USER)
             if LAN_ACTIVE_USER and LAN_TCP_PORT:
+                m_info = get_active_modpack_manifest()
+                t_status = get_tunnel_status()
+                pub_addr = t_status.get("public_address") if t_status.get("running") else None
+                active_port = detect_active_minecraft_port(LAN_ACTIVE_VERSION_DIR)
                 payload = json.dumps({
                     "magic": "MOON_SKIN_V1",
                     "user": LAN_ACTIVE_USER,
                     "hash": my_hash or "",
-                    "port": LAN_TCP_PORT
+                    "port": LAN_TCP_PORT,
+                    "version_name": m_info["version_name"] if m_info else "",
+                    "mc_version": m_info["mc_version"] if m_info else "",
+                    "loader": m_info["loader"] if m_info else "",
+                    "mod_count": m_info["mod_count"] if m_info else 0,
+                    "server_addr": pub_addr or (f":{active_port}" if active_port else "")
                 }).encode('utf-8')
                 for b_target in get_broadcast_targets():
                     try:
@@ -1212,6 +1478,12 @@ def _lan_udp_loop():
                         peer_info["ip"] = remote_ip
                         peer_info["port"] = peer_tcp
                         peer_info["last_seen"] = now
+                        if "version_name" in msg:
+                            peer_info["version_name"] = str(msg.get("version_name", ""))
+                            peer_info["mc_version"] = str(msg.get("mc_version", ""))
+                            peer_info["loader"] = str(msg.get("loader", ""))
+                            peer_info["mod_count"] = int(msg.get("mod_count", 0))
+                            peer_info["server_addr"] = str(msg.get("server_addr", ""))
 
                     _, local_hash = get_local_skin_payload(peer_user)
                     if peer_hash and (local_hash != peer_hash):
