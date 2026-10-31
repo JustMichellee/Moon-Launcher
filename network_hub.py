@@ -644,8 +644,24 @@ def get_tunnel_status():
 
 
 # ==============================================================================
-# SUPABASE CLOUD PRESENCE & MATCHMAKING ENGINE
+# MOON CLOUD & NEXT.JS CENTRAL API ENGINE
 # ==============================================================================
+
+DEFAULT_MOON_WEB_API = "http://localhost:3000"
+
+def get_moon_web_api():
+    """Retrieves configured Moon Web API URL, defaulting to local/cloud central endpoint."""
+    url = os.environ.get("MOON_WEB_API", "")
+    if not url:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    url = d.get("moon_web_api", "")
+        except Exception:
+            pass
+    return (url or DEFAULT_MOON_WEB_API).strip().rstrip('/')
 
 def get_supabase_config():
     """Retrieves configured Supabase URL and Anon Key from launcher config or environment."""
@@ -703,15 +719,15 @@ def supabase_api_request(endpoint, method="GET", payload=None, extra_headers=Non
         return None
 
 def cloud_update_presence(username=None):
-    """Pushes active player presence, modpack, and server address to Supabase cloud."""
-    sb_url, sb_key = get_supabase_config()
-    if not sb_url or not sb_key:
-        return False
-        
+    """
+    Pushes active player presence, modpack, and server address to:
+    1. Next.js Moon Web API (Central Heartbeat)
+    2. Supabase Cloud (if direct credentials are configured)
+    """
     u_name = username or LAN_ACTIVE_USER or "Player"
     v_dir = LAN_ACTIVE_VERSION_DIR
     m = get_active_modpack_manifest(v_dir) if v_dir else None
-    v_name = m["version_name"] if m else (LAN_ACTIVE_VERSION_NAME or "Unknown Modpack")
+    v_name = m["version_name"] if m else (LAN_ACTIVE_VERSION_NAME or "Vanilla")
     mc_ver = m["mc_version"] if m else "1.20.1"
     loader = m["loader"] if m else "Forge"
     m_cnt = m["mod_count"] if m else 0
@@ -719,107 +735,158 @@ def cloud_update_presence(username=None):
     t_status = get_tunnel_status()
     pub_addr = t_status.get("public_address") if t_status.get("running") else ""
     is_hosting = bool(pub_addr)
-    status_str = "hosting" if is_hosting else "online"
+    status_str = "in_game" if is_hosting else "online"
     
-    payload = {
-        "username": u_name,
-        "player_id": u_name.lower().replace(" ", "_"),
-        "status": status_str,
-        "version_name": v_name,
-        "mc_version": mc_ver,
-        "loader": loader,
-        "mod_count": m_cnt,
-        "server_addr": pub_addr or "",
-        "tunnel_active": is_hosting,
-        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    }
+    player_id = f"MOON-{abs(hash(u_name)) % 9000 + 1000}"
     
-    res = supabase_api_request("presence", method="POST", payload=payload, extra_headers={"Prefer": "resolution=merge-duplicates"})
-    return res is not None
-
-def cloud_get_friends_presence(usernames_list):
-    """Fetches real-time status of given usernames from Supabase presence table."""
-    if not usernames_list:
-        return {}
-    sb_url, sb_key = get_supabase_config()
-    if not sb_url or not sb_key:
-        return {}
-        
-    names_quoted = ",".join(f'"{u}"' for u in usernames_list)
-    endpoint = f"presence?username=in.({urllib.parse.quote(names_quoted)})"
-    res = supabase_api_request(endpoint, method="GET")
-    
-    if isinstance(res, list):
-        now = time.time()
-        mapping = {}
-        with CLOUD_PEERS_LOCK:
-            for item in res:
-                uname = item.get("username")
-                if uname:
-                    CLOUD_PEERS[uname.lower()] = {
-                        "username": uname,
-                        "status": item.get("status", "online"),
-                        "version_name": item.get("version_name", ""),
-                        "mc_version": item.get("mc_version", ""),
-                        "loader": item.get("loader", ""),
-                        "mod_count": item.get("mod_count", 0),
-                        "server_addr": item.get("server_addr", ""),
-                        "last_seen": now
-                    }
-                    mapping[uname.lower()] = CLOUD_PEERS[uname.lower()]
-        return mapping
-    return {}
-
-def cloud_lookup_player(player_id_or_name):
-    """Queries live presence or profile of any player globally by ID or username."""
-    if not player_id_or_name:
-        return None
-    clean = str(player_id_or_name).strip()
-    
-    endpoint = f"presence?or=(username.ilike.{urllib.parse.quote(clean)},player_id.ilike.{urllib.parse.quote(clean)})&limit=1"
-    res = supabase_api_request(endpoint, method="GET")
-    if isinstance(res, list) and res:
-        item = res[0]
-        return {
-            "username": item.get("username", clean),
-            "status": item.get("status", "online"),
-            "version_name": item.get("version_name", ""),
-            "mc_version": item.get("mc_version", ""),
-            "loader": item.get("loader", ""),
-            "mod_count": item.get("mod_count", 0),
-            "server_addr": item.get("server_addr", "")
-        }
-    return None
-
-def _cloud_presence_loop():
-    """Background loop that periodically refreshes player presence and friends status."""
-    global CLOUD_SYNC_RUNNING
-    while CLOUD_SYNC_RUNNING:
+    # 1. Update Next.js Moon Web API
+    web_api = get_moon_web_api()
+    if web_api:
         try:
-            cloud_update_presence()
-            # Refresh friends presence
-            d = load_network_data()
-            f_names = [f.get("username") for f in d.get("friends", []) if f.get("username")]
-            if f_names:
-                cloud_get_friends_presence(f_names)
+            target = f"{web_api}/api/presence/heartbeat"
+            payload = {
+                "player_id": player_id,
+                "username": u_name,
+                "display_name": u_name,
+                "status": status_str,
+                "current_server": pub_addr or "",
+                "current_modpack": v_name
+            }
+            body = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                target,
+                data=body,
+                headers={"Content-Type": "application/json", "User-Agent": "Moon-Launcher/2.4.5"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                pass
         except Exception:
             pass
-        time.sleep(25.0)
 
-def start_cloud_presence_service(username=None):
-    """Starts the background Supabase cloud presence service."""
-    global CLOUD_SYNC_RUNNING
+    # 2. Update Supabase if configured
     sb_url, sb_key = get_supabase_config()
-    if not sb_url or not sb_key:
-        return False
-        
-    if CLOUD_SYNC_RUNNING:
-        return True
-        
-    CLOUD_SYNC_RUNNING = True
-    t = threading.Thread(target=_cloud_presence_loop, daemon=True, name="MoonCloudPresence")
-    t.start()
+    if sb_url and sb_key:
+        payload_sb = {
+            "username": u_name,
+            "player_id": u_name.lower().replace(" ", "_"),
+            "status": status_str,
+            "version_name": v_name,
+            "mc_version": mc_ver,
+            "loader": loader,
+            "mod_count": m_cnt,
+            "server_addr": pub_addr or "",
+            "tunnel_active": is_hosting,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        supabase_api_request("presence", method="POST", payload=payload_sb, extra_headers={"Prefer": "resolution=merge-duplicates"})
+    
     return True
+
+def cloud_get_friends_presence(usernames_list):
+    """Fetches real-time status of given usernames from Next.js Web API and Supabase."""
+    if not usernames_list:
+        return {}
+        
+    mapping = {}
+    
+    # 1. Query Next.js Moon Web API
+    web_api = get_moon_web_api()
+    if web_api:
+        try:
+            query_str = urllib.parse.quote(",".join(usernames_list))
+            target = f"{web_api}/api/presence/friends?friends={query_str}"
+            req = urllib.request.Request(target, headers={"User-Agent": "Moon-Launcher/2.4.5"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                friends_res = data.get("friends", [])
+                with CLOUD_PEERS_LOCK:
+                    for item in friends_res:
+                        uname = item.get("username", "")
+                        if uname:
+                            info = {
+                                "username": uname,
+                                "player_id": item.get("player_id", ""),
+                                "status": item.get("status", "offline"),
+                                "version_name": item.get("current_modpack", ""),
+                                "server_addr": item.get("current_server", ""),
+                                "skin_url": item.get("skin_url", ""),
+                                "last_seen": item.get("last_seen", "")
+                            }
+                            CLOUD_PEERS[uname.lower()] = info
+                            mapping[uname.lower()] = info
+        except Exception:
+            pass
+            
+    # 2. Also query Supabase if configured
+    sb_url, sb_key = get_supabase_config()
+    if sb_url and sb_key:
+        try:
+            names_quoted = ",".join(f'"{u}"' for u in usernames_list)
+            endpoint = f"presence?username=in.({urllib.parse.quote(names_quoted)})"
+            res = supabase_api_request(endpoint, method="GET")
+            if isinstance(res, list):
+                with CLOUD_PEERS_LOCK:
+                    for item in res:
+                        uname = item.get("username")
+                        if uname:
+                            info = {
+                                "username": uname,
+                                "status": item.get("status", "online"),
+                                "version_name": item.get("version_name", ""),
+                                "mc_version": item.get("mc_version", ""),
+                                "loader": item.get("loader", ""),
+                                "mod_count": item.get("mod_count", 0),
+                                "server_addr": item.get("server_addr", ""),
+                                "tunnel_active": item.get("tunnel_active", False),
+                                "updated_at": item.get("updated_at", "")
+                            }
+                            CLOUD_PEERS[uname.lower()] = info
+                            mapping[uname.lower()] = info
+        except Exception:
+            pass
+            
+    return mapping
+
+def cloud_lookup_player(player_id_or_name):
+    """Looks up player information by Player ID or Username from Next.js API or Supabase."""
+    clean = str(player_id_or_name).strip().lstrip('@')
+    if not clean:
+        return None
+        
+    # Check cache first
+    with CLOUD_PEERS_LOCK:
+        if clean.lower() in CLOUD_PEERS:
+            return CLOUD_PEERS[clean.lower()]
+            
+    # Query Next.js API
+    web_api = get_moon_web_api()
+    if web_api:
+        try:
+            target = f"{web_api}/api/player/{urllib.parse.quote(clean)}"
+            req = urllib.request.Request(target, headers={"User-Agent": "Moon-Launcher/2.4.5"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                profile = json.loads(resp.read().decode('utf-8'))
+                if profile and "username" in profile:
+                    pres = profile.get("presence", {})
+                    info = {
+                        "player_id": profile.get("id", ""),
+                        "username": profile.get("username", clean),
+                        "display_name": profile.get("display_name", clean),
+                        "status": pres.get("status", "offline"),
+                        "version_name": pres.get("current_modpack", ""),
+                        "server_addr": pres.get("current_server", ""),
+                        "badges": profile.get("badges", [])
+                    }
+                    with CLOUD_PEERS_LOCK:
+                        CLOUD_PEERS[clean.lower()] = info
+                        CLOUD_PEERS[profile["username"].lower()] = info
+                    return info
+        except Exception:
+            pass
+            
+    return None
+
 
 def show_player_profile_card(player_id, active_version_dir=None):
     """
