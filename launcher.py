@@ -4393,6 +4393,11 @@ def switch_version(curr_dir, cfg, target_name=None):
 
     save_config(new_dir, new_cfg)
     set_active_version(chosen_name)
+    try:
+        import network_hub
+        network_hub.update_active_version(new_dir, chosen_name)
+    except Exception:
+        pass
     ensure_launch_args(new_dir, declared_loader=new_cfg.get('loader'), mc_version=new_cfg.get('mc_version'))
     update_launch_args(new_dir, new_cfg)
 
@@ -5514,6 +5519,7 @@ def main():
 
     # Start Native Zero-Config LAN & Radmin P2P Skin Auto-Sync Service
     network_hub.start_lan_skin_service(cfg.get('username', 'Player'), version_dir)
+    network_hub.update_active_version(version_dir, cfg.get('version_name'))
     updater.start_background_update_checker()
 
     # Process CLI arguments if passed (e.g. python launcher.py /play or /install homestead)

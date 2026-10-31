@@ -15,6 +15,8 @@ import threading
 import subprocess
 import urllib.request
 import urllib.parse
+import zipfile
+import io
 import base64
 if sys.platform == 'win32':
     import winreg
@@ -271,12 +273,30 @@ def add_friend_from_invite(invite, data=None):
 
     save_network_data(data)
 
+    # Attempt bidirectional mutual handshake to peer's Moon Launcher
+    peer_ip = None
+    peer_port = 25570
+    if addr and ":" in addr:
+        peer_ip = addr.split(":")[0]
+    with LAN_PEERS_LOCK:
+        for uname, p in LAN_PEERS.items():
+            if uname.lower() == u_name.lower():
+                peer_ip = p.get("ip")
+                peer_port = p.get("port", 25570)
+                break
+
+    handshake_result = send_mutual_handshake(peer_ip, peer_port, LAN_ACTIVE_USER, addr) if peer_ip else None
+
     box_w = 68
     lines = [
-        f"{C_GREEN}\033[1m[OK] Friend Added Successfully via Invite Link!\033[0m",
+        f"{C_GREEN}\033[1m[OK] Friend Added Successfully!\033[0m",
         f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
         f"  {C_WHITE}* Player Name     :{CLR_RESET} {C_CYAN}{u_name}{CLR_RESET}",
     ]
+    if handshake_result and handshake_result.get("status") == "ok":
+        lines.append(f"  {C_WHITE}* Mutual Friendship:{CLR_RESET} {C_GREEN}Confirmed! ({u_name} added you back){CLR_RESET}")
+    elif peer_ip:
+        lines.append(f"  {C_WHITE}* Mutual Handshake:{CLR_RESET} {C_MUTED}Dispatched to {peer_ip}:{peer_port}{CLR_RESET}")
     if addr:
         lines.append(f"  {C_WHITE}* Server Address  :{CLR_RESET} {C_WHITE}{addr}{CLR_RESET}")
         p_res = ping_minecraft_server(addr, timeout=2.0)
@@ -806,6 +826,21 @@ def handle_friend_command(args, active_version_dir=None):
                 print(f"\n{C_GREEN}[OK] Updated contact for friend '{u_name}'!{CLR_RESET}\n")
                 return
 
+        # Check LAN_PEERS for peer discovery info
+        peer_ip = None
+        peer_port = 25570
+        with LAN_PEERS_LOCK:
+            for uname, p in LAN_PEERS.items():
+                if uname.lower() == u_name.lower():
+                    peer_ip = p.get("ip")
+                    peer_port = p.get("port", 25570)
+                    if not addr:
+                        addr = p.get("server_addr") or f"{peer_ip}:25565"
+                    break
+
+        if addr and ":" in addr and not peer_ip:
+            peer_ip = addr.split(":")[0]
+
         friends.append({
             "username": u_name,
             "address": addr,
@@ -813,11 +848,26 @@ def handle_friend_command(args, active_version_dir=None):
             "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
         })
         save_network_data(data)
-        print(f"\n{C_GREEN}[OK] Friend '{u_name}' added to your contacts list!{CLR_RESET}")
+
+        # Dispatch mutual handshake
+        hs_res = send_mutual_handshake(peer_ip, peer_port, LAN_ACTIVE_USER, addr) if peer_ip else None
+
+        box_w = 68
+        lines = [
+            f"{C_GREEN}\033[1m[OK] Friend Added Successfully!\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Player Name     :{CLR_RESET} {C_CYAN}{u_name}{CLR_RESET}",
+        ]
         if addr:
-            print(f"{C_MUTED}Server Address: {addr}{CLR_RESET}\n")
+            lines.append(f"  {C_WHITE}* Address         :{CLR_RESET} {C_WHITE}{addr}{CLR_RESET}")
+        if hs_res and hs_res.get("status") == "ok":
+            lines.append(f"  {C_WHITE}* Mutual Friendship:{CLR_RESET} {C_GREEN}Confirmed! ({u_name} added you back){CLR_RESET}")
+        elif peer_ip:
+            lines.append(f"  {C_WHITE}* Mutual Handshake:{CLR_RESET} {C_MUTED}Dispatched to {peer_ip}:{peer_port}{CLR_RESET}")
         else:
-            print(f"{C_MUTED}Tip: To generate invite link: /friend invite{CLR_RESET}\n")
+            lines.append(f"  {C_WHITE}* Status          :{CLR_RESET} {C_MUTED}Saved locally (Peer offline or not yet detected){CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="Friend Added") + "\n")
 
     # /friend remove <name>
     elif sub in ("remove", "delete", "rm", "-"):
@@ -974,8 +1024,40 @@ def handle_friend_command(args, active_version_dir=None):
         print(f"\n{C_GREEN}Launching {v_name} and joining {target_name} at {srv_target}...{CLR_RESET}\n")
         launcher.launch_game(v_dir, cfg)
 
+    # /friend nearby or /friend discover
+    elif sub in ("nearby", "discover", "lan", "radar"):
+        with LAN_PEERS_LOCK:
+            nearby = [
+                {"username": k, **v}
+                for k, v in LAN_PEERS.items()
+                if k.lower() != (LAN_ACTIVE_USER or "").lower()
+            ]
+
+        box_w = 68
+        lines = [
+            f"{C_WHITE}\033[1mDiscovered LAN & Radmin Peers\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+        ]
+        if not nearby:
+            lines.append(f"{C_MUTED}No other players detected on your local network or Radmin VPN.{CLR_RESET}")
+            lines.append(f"{C_MUTED}Make sure your friends have Moon Launcher running on the same network.{CLR_RESET}")
+        else:
+            for p in nearby:
+                p_name = p.get("username", "Unknown")
+                p_ip = p.get("ip", "")
+                p_ver = p.get("version_name") or "Unknown"
+                p_mods = p.get("mod_count", 0)
+                lines.append(f"  {C_GREEN}[ONLINE]{CLR_RESET} {C_CYAN}\033[1m{p_name:<16}\033[0m {C_WHITE}{p_ver}{CLR_RESET} ({p_mods} mods)")
+                lines.append(f"           {C_MUTED}IP: {p_ip}:{p.get('port', 25570)}{CLR_RESET}")
+                lines.append(f"           {C_CYAN}↳ Add: Type /friend add {p_name}{CLR_RESET}")
+
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Type /friend add <name> to add and establish mutual friendship!{CLR_RESET}")
+        print("\n" + render_box(lines, box_w, title="Nearby Peers") + "\n")
+        return
+
     else:
-        print(f"\n{C_RED}Unknown friend command. Available: list, invite, add, remove, ping, note{CLR_RESET}\n")
+        print(f"\n{C_RED}Unknown friend command. Available: list, nearby, invite, add, remove, ping, note{CLR_RESET}\n")
 
 # ==============================================================================
 # COMMAND HANDLER: /host
@@ -1186,6 +1268,7 @@ LAN_TCP_SOCKET = None
 LAN_UDP_SOCKET = None
 LAN_ACTIVE_USER = None
 LAN_ACTIVE_VERSION_DIR = None
+LAN_ACTIVE_VERSION_NAME = None
 LAN_PEERS_LOCK = threading.Lock()
 LAN_PEERS = {}  # {username: {'ip': str, 'port': int, 'hash': str, 'last_seen': float, 'synced': bool}}
 LAN_TRIGGER_EVENT = threading.Event()
@@ -1268,14 +1351,179 @@ def distribute_peer_skin(peer_username, skin_bytes, version_dir=None):
         return False
 
 
+def resolve_clean_modpack_name(target_dir=None, candidate_name=None):
+    """
+    Resolves the clean, user-friendly modpack name instead of generic internal folder names like '1.20.1' or 'n'.
+    """
+    if candidate_name and candidate_name not in ("1.20.1", "1.12.2", "1.21.1", "n", "run", "client"):
+        return candidate_name
+
+    target = target_dir or LAN_ACTIVE_VERSION_DIR
+    if not target:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_v = json.load(f).get("version_name")
+                    if cfg_v: return cfg_v
+        except Exception:
+            pass
+        return "Custom Modpack"
+
+    # 1. Check if target has a launcher_config.json
+    local_cfg = os.path.join(target, "launcher_config.json")
+    if os.path.exists(local_cfg):
+        try:
+            with open(local_cfg, "r", encoding="utf-8") as f:
+                cfg_v = json.load(f).get("version_name")
+                if cfg_v and cfg_v not in ("1.20.1", "1.12.2", "1.21.1", "n"):
+                    return cfg_v
+        except Exception:
+            pass
+
+    # 2. Check global launcher_config.json in BASE_DIR
+    global_cfg = os.path.join(BASE_DIR, "launcher_config.json")
+    if os.path.exists(global_cfg):
+        try:
+            with open(global_cfg, "r", encoding="utf-8") as f:
+                cfg_v = json.load(f).get("version_name")
+                if cfg_v and cfg_v not in ("1.20.1", "1.12.2", "1.21.1", "n"):
+                    return cfg_v
+        except Exception:
+            pass
+
+    # 3. Check for descriptor json file inside target (e.g. 'DeadZone 1.20.1 Forge.json')
+    try:
+        for f in os.listdir(target):
+            if f.endswith(".json") and f not in ("launcher_config.json", "usercache.json", "usernamecache.json"):
+                base_json = os.path.splitext(f)[0]
+                if base_json not in ("1.20.1", "1.12.2", "1.21.1", "n"):
+                    return base_json
+    except Exception:
+        pass
+
+    # 4. Fallback to folder basename
+    base = os.path.basename(os.path.normpath(target))
+    return base if base else "Custom Modpack"
+
+def generate_core_bundle_bytes(target_dir, v_name):
+    """
+    Compresses all configs, scripts, menus, and descriptors into an in-memory zip bundle.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+        # 1. Essential root files
+        for f in ["launch_args.txt", "launcher_config.json", "icon.png", "icon.webp", "options.txt"]:
+            fp = os.path.join(target_dir, f)
+            if os.path.exists(fp):
+                zf.write(fp, f)
+        # 2. Descriptors
+        for f in os.listdir(target_dir):
+            if f.endswith(".json") and f not in ("launcher_config.json", "usercache.json", "usernamecache.json"):
+                zf.write(os.path.join(target_dir, f), f)
+        # 3. Directories: configs, scripts, kubejs, menus, openloader
+        for d in ["config", "defaultconfigs", "kubejs", "scripts", "patchouli_books", "openloader", "fancymenu_data"]:
+            dp = os.path.join(target_dir, d)
+            if os.path.exists(dp):
+                for root, _, files in os.walk(dp):
+                    for file in files:
+                        full = os.path.join(root, file)
+                        rel = os.path.relpath(full, target_dir).replace("\\", "/")
+                        zf.write(full, rel)
+    return buf.getvalue()
+
+def setup_downloaded_modpack(target_v_dir, v_name, mc_ver, loader):
+    """
+    Ensures downloaded modpack is properly adapted and ready to launch immediately:
+    1. Adapts launch_args.txt (sets --gameDir, -Djava.library.path, --username, --version).
+    2. Self-heals natives for detected MC version.
+    3. Self-heals client jar and libraries descriptor.
+    4. Writes launcher_config.json inside version directory.
+    5. Sets active profile in Moon Launcher so launcher UI and play commands recognize it.
+    """
+    norm_v_dir = target_v_dir.replace("\\", "/")
+    norm_natives = f"{norm_v_dir}/natives"
+    
+    args_path = os.path.join(target_v_dir, "launch_args.txt")
+    curr_user = LAN_ACTIVE_USER or "Player"
+    try:
+        import launcher
+        curr_user = launcher.load_config().get("username", curr_user)
+    except Exception:
+        pass
+
+    if os.path.exists(args_path):
+        try:
+            with open(args_path, "r", encoding="utf-8-sig", errors="ignore") as f:
+                content = f.read()
+            lines = content.splitlines()
+            new_lines = []
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                if line.startswith("-Djava.library.path="):
+                    new_lines.append(f"-Djava.library.path={norm_natives}")
+                elif line.strip() == "--gameDir" and i + 1 < len(lines):
+                    new_lines.append(line)
+                    new_lines.append(f'"{norm_v_dir}"')
+                    i += 1
+                elif line.strip() == "--username" and i + 1 < len(lines):
+                    new_lines.append(line)
+                    new_lines.append(curr_user)
+                    i += 1
+                elif line.strip() == "--version" and i + 1 < len(lines):
+                    new_lines.append(line)
+                    new_lines.append(v_name)
+                    i += 1
+                else:
+                    new_lines.append(line)
+                i += 1
+            with open(args_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(new_lines) + "\n")
+        except Exception:
+            pass
+
+    try:
+        import launcher
+        launcher.ensure_natives_for_version(target_v_dir, mc_ver)
+        launcher.ensure_launch_args(target_v_dir, declared_loader=loader, mc_version=mc_ver)
+        
+        local_cfg = {
+            "version_name": v_name,
+            "mc_version": mc_ver,
+            "loader": loader,
+            "username": curr_user
+        }
+        launcher.save_config(target_v_dir, local_cfg)
+        launcher.set_active_version(v_name)
+    except Exception:
+        pass
+
+    update_active_version(target_v_dir, v_name)
+    return target_v_dir
+
+def send_mutual_handshake(peer_ip, peer_port, my_username, my_addr=""):
+    """Sends a reciprocal friend handshake to peer's Moon Launcher TCP server."""
+    if not peer_ip or not my_username:
+        return None
+    try:
+        t_status = get_tunnel_status()
+        pub_addr = my_addr or (t_status.get("public_address") if t_status.get("running") else "")
+        url = f"http://{peer_ip}:{peer_port}/friend/handshake?user={urllib.parse.quote(my_username)}&addr={urllib.parse.quote(pub_addr)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Moon-Launcher/1.0"})
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except Exception:
+        return None
+
 def get_active_modpack_manifest(v_dir=None):
-    """Scans and generates a file manifest of the active modpack (mods and configs)."""
+    """Scans and generates a file manifest of the active modpack with clean naming, bundle directories, and core bundle support."""
     target = v_dir or LAN_ACTIVE_VERSION_DIR
     if not target or not os.path.exists(target):
         return None
-    v_name = os.path.basename(target)
+    v_name = resolve_clean_modpack_name(target, LAN_ACTIVE_VERSION_NAME)
     mods_dir = os.path.join(target, "mods")
-    config_dir = os.path.join(target, "config")
+    tacz_dir = os.path.join(target, "tacz")
     
     files = []
     total_size = 0
@@ -1284,16 +1532,21 @@ def get_active_modpack_manifest(v_dir=None):
             if f.endswith('.jar'):
                 fp = os.path.join(mods_dir, f)
                 sz = os.path.getsize(fp)
-                files.append({"path": f"mods/{f}", "size": sz})
+                files.append({"path": f"mods/{f}", "size": sz, "is_dir": False})
                 total_size += sz
 
-    if os.path.exists(config_dir):
-        for root, dirs, f_list in os.walk(config_dir):
-            for f in f_list:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, target).replace("\\", "/")
-                sz = os.path.getsize(fp)
-                files.append({"path": rel, "size": sz})
+    # TaCZ Gunpacks: Stream folders as high-speed directory bundles to avoid 20,000+ separate HTTP requests!
+    if os.path.exists(tacz_dir):
+        for item in sorted(os.listdir(tacz_dir)):
+            ip = os.path.join(tacz_dir, item)
+            if os.path.isdir(ip):
+                sz = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(ip) for f in fs)
+                cnt = sum(len(fs) for _, _, fs in os.walk(ip))
+                files.append({"path": f"tacz/{item}", "size": sz, "is_dir": True, "file_count": cnt})
+                total_size += sz
+            elif item.endswith('.zip') or item.endswith('.toml'):
+                sz = os.path.getsize(ip)
+                files.append({"path": f"tacz/{item}", "size": sz, "is_dir": False})
                 total_size += sz
 
     mc_ver = "1.20.1"
@@ -1307,6 +1560,19 @@ def get_active_modpack_manifest(v_dir=None):
                 loader = d.get("loader", loader)
         except Exception:
             pass
+    else:
+        try:
+            for f in os.listdir(target):
+                if f.endswith(".json") and f not in ("usercache.json", "usernamecache.json"):
+                    with open(os.path.join(target, f), "r", encoding="utf-8") as jf:
+                        jd = json.load(jf)
+                        if "inheritsFrom" in jd:
+                            mc_ver = jd.get("inheritsFrom")
+                        elif "id" in jd:
+                            mc_ver = jd.get("id")
+                    break
+        except Exception:
+            pass
 
     return {
         "version_name": v_name,
@@ -1315,13 +1581,15 @@ def get_active_modpack_manifest(v_dir=None):
         "mod_count": len([i for i in files if i["path"].startswith("mods/")]),
         "total_files": len(files),
         "total_size": total_size,
+        "has_core_bundle": True,
         "files": files
     }
 
 def sync_modpack_from_peer(peer_ip, peer_port, versions_root=None):
     """
     Connects to peer P2P server, requests active modpack manifest,
-    and selectively downloads missing/updated mods and configs with a live progress bar.
+    downloads core bundle (configs, scripts, descriptors, launch args),
+    and selectively streams differential mods and gunpacks with live progress.
     """
     v_root = versions_root or os.path.join(BASE_DIR, "versions")
     base_url = f"http://{peer_ip}:{peer_port}"
@@ -1337,43 +1605,98 @@ def sync_modpack_from_peer(peer_ip, peer_port, versions_root=None):
     v_name = manifest.get("version_name")
     if not v_name:
         return None
+    mc_ver = manifest.get("mc_version", "1.20.1")
+    loader = manifest.get("loader", "Forge")
         
     target_v_dir = os.path.join(v_root, v_name)
     os.makedirs(target_v_dir, exist_ok=True)
     
+    box_w = 68
+    sync_banner = [
+        f"{C_WHITE}\033[1mMoon P2P High-Speed Modpack Sync\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}* Modpack Name   :{CLR_RESET} {C_CYAN}\033[1m{v_name}\033[0m",
+        f"  {C_WHITE}* Version/Loader :{CLR_RESET} {C_WHITE}{mc_ver} ({loader}){CLR_RESET}",
+        f"  {C_WHITE}* Target Folder  :{CLR_RESET} {C_MUTED}{target_v_dir}{CLR_RESET}",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+    ]
+    print("\n" + render_box(sync_banner, box_w, title="P2P Sync Engine") + "\n")
+
+    # Step 1: Download & Extract Core Bundle (Configs, Scripts, Descriptors, Launch Args)
+    if manifest.get("has_core_bundle", True):
+        print(f"{C_CYAN}[1/2] Streaming core system bundle (configs, scripts, launch settings)...{CLR_RESET}")
+        try:
+            b_url = f"{base_url}/modpack/core_bundle"
+            b_req = urllib.request.Request(b_url, headers={"User-Agent": "Moon-Launcher/1.0"})
+            with urllib.request.urlopen(b_req, timeout=20.0) as b_resp:
+                b_data = b_resp.read()
+            with zipfile.ZipFile(io.BytesIO(b_data), "r") as zf:
+                zf.extractall(target_v_dir)
+            print(f"  {C_GREEN}✓ Extracted {len(b_data)/(1024*1024):.2f} MB core bundle in under 1 second!{CLR_RESET}\n")
+        except Exception as e:
+            print(f"  {C_AMBER}! Notice: Core bundle stream skipped ({e}), falling back to direct files.{CLR_RESET}\n")
+
+    # Step 2: Differential Sync for Mods and Gunpacks
     files = manifest.get("files", [])
     to_download = []
     download_bytes = 0
     for item in files:
         rel = item["path"]
         sz = item["size"]
+        is_d = item.get("is_dir", False)
         dest = os.path.join(target_v_dir, rel.replace("/", os.sep))
-        if not os.path.exists(dest) or os.path.getsize(dest) != sz:
-            to_download.append((rel, sz, dest))
+        
+        need = False
+        if is_d:
+            if not os.path.exists(dest) or len(os.listdir(dest) if os.path.isdir(dest) else []) == 0:
+                need = True
+        else:
+            if not os.path.exists(dest) or os.path.getsize(dest) != sz:
+                need = True
+                
+        if need:
+            to_download.append((rel, sz, dest, is_d))
             download_bytes += sz
             
-    print(f"\n{C_CYAN}[Moon P2P] Syncing custom modpack '{v_name}' ({len(to_download)} files to download, {download_bytes / (1024*1024):.1f} MB)...{CLR_RESET}")
-    
-    transferred = 0
-    t0 = time.time()
-    for idx, (rel, sz, dest) in enumerate(to_download, 1):
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        f_url = f"{base_url}/modpack/file?path={urllib.parse.quote(rel)}"
-        req = urllib.request.Request(f_url, headers={"User-Agent": "Moon-Launcher/1.0"})
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
-            with open(dest, "wb") as f_out:
-                while chunk := resp.read(65536):
-                    f_out.write(chunk)
-                    transferred += len(chunk)
-                    
-        pct = min(100, int((transferred / max(1, download_bytes)) * 100))
-        speed = (transferred / max(0.1, time.time() - t0)) / (1024 * 1024)
-        bar_len = 24
-        filled = int(bar_len * (pct / 100))
-        bar = "█" * filled + "░" * (bar_len - filled)
-        print(f"\r  [{C_GREEN}{bar}{CLR_RESET}] {pct}% ({transferred / (1024*1024):.1f}/{download_bytes / (1024*1024):.1f} MB, {speed:.1f} MB/s) {os.path.basename(rel)[:24]:<24}", end="", flush=True)
-        
-    print(f"\n{C_GREEN}[Moon P2P] Modpack '{v_name}' successfully synchronized!{CLR_RESET}\n")
+    if to_download:
+        print(f"{C_CYAN}[2/2] Syncing {len(to_download)} differential mod & gunpack packages ({download_bytes / (1024*1024):.1f} MB)...{CLR_RESET}")
+        transferred = 0
+        t0 = time.time()
+        for idx, (rel, sz, dest, is_d) in enumerate(to_download, 1):
+            if is_d:
+                os.makedirs(dest, exist_ok=True)
+                d_url = f"{base_url}/modpack/bundle_dir?dir={urllib.parse.quote(rel)}"
+                req = urllib.request.Request(d_url, headers={"User-Agent": "Moon-Launcher/1.0"})
+                with urllib.request.urlopen(req, timeout=60.0) as resp:
+                    pkg_bytes = resp.read()
+                    transferred += sz
+                with zipfile.ZipFile(io.BytesIO(pkg_bytes), "r") as zf:
+                    zf.extractall(dest)
+            else:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                f_url = f"{base_url}/modpack/file?path={urllib.parse.quote(rel)}"
+                req = urllib.request.Request(f_url, headers={"User-Agent": "Moon-Launcher/1.0"})
+                with urllib.request.urlopen(req, timeout=30.0) as resp:
+                    with open(dest, "wb") as f_out:
+                        while chunk := resp.read(65536):
+                            f_out.write(chunk)
+                            transferred += len(chunk)
+                        
+            pct = min(100, int((transferred / max(1, download_bytes)) * 100))
+            speed = (transferred / max(0.1, time.time() - t0)) / (1024 * 1024)
+            bar_len = 24
+            filled = int(bar_len * (pct / 100))
+            bar = "█" * filled + "░" * (bar_len - filled)
+            item_display = (f"[{os.path.basename(rel)}]" if is_d else os.path.basename(rel))[:24]
+            print(f"\r  [{C_GREEN}{bar}{CLR_RESET}] {pct}% ({transferred / (1024*1024):.1f}/{download_bytes / (1024*1024):.1f} MB, {speed:.1f} MB/s) {item_display:<24}", end="", flush=True)
+        print()
+    else:
+        print(f"{C_GREEN}[2/2] All mod and gunpack packages are already up-to-date!{CLR_RESET}\n")
+
+    # Step 3: Self-heal and finalize installation
+    print(f"{C_CYAN}[Moon P2P] Finalizing installation & runtime environment...{CLR_RESET}")
+    setup_downloaded_modpack(target_v_dir, v_name, mc_ver, loader)
+    print(f"{C_GREEN}[OK] Custom modpack '{v_name}' successfully installed and ready to play!{CLR_RESET}\n")
     return target_v_dir
 
 def _lan_tcp_server_loop():
@@ -1403,6 +1726,69 @@ def _lan_tcp_server_loop():
                         conn.sendall(resp)
                     else:
                         conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path.startswith("/friend/handshake"):
+                    # Mutual Handshake Endpoint: Automatically register reciprocal friendship
+                    parsed_q = urllib.parse.urlparse(path)
+                    qs = urllib.parse.parse_qs(parsed_q.query)
+                    h_user = qs.get("user", [""])[0].strip()
+                    h_addr = qs.get("addr", [""])[0].strip()
+                    
+                    if h_user and h_user.lower() != (LAN_ACTIVE_USER or "").lower():
+                        n_data = load_network_data()
+                        n_friends = n_data.setdefault("friends", [])
+                        matched_f = next((f for f in n_friends if f.get("username", "").lower() == h_user.lower()), None)
+                        if matched_f:
+                            if h_addr: matched_f["address"] = h_addr
+                        else:
+                            n_friends.append({
+                                "username": h_user,
+                                "address": h_addr,
+                                "note": "Mutual Friend (Handshake)",
+                                "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                        save_network_data(n_data)
+                        print(f"\n{C_GREEN}\033[1m[!] Mutual Friend Handshake:{CLR_RESET} {C_CYAN}{h_user}{CLR_RESET} {C_GREEN}added you as a friend!\033[0m\n", end="", flush=True)
+
+                    hs_res = json.dumps({"status": "ok", "user": LAN_ACTIVE_USER}).encode("utf-8")
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(hs_res)).encode() + b"\r\nConnection: close\r\n\r\n" + hs_res)
+
+                elif path.startswith("/modpack/bundle_dir?dir="):
+                    rel_dir = urllib.parse.unquote(path.split("dir=", 1)[1].strip())
+                    if LAN_ACTIVE_VERSION_DIR:
+                        safe_rel = os.path.normpath(rel_dir).lstrip(r"\/")
+                        target_dir = os.path.join(LAN_ACTIVE_VERSION_DIR, safe_rel)
+                        if os.path.commonpath([LAN_ACTIVE_VERSION_DIR, target_dir]) == LAN_ACTIVE_VERSION_DIR and os.path.isdir(target_dir):
+                            buf = io.BytesIO()
+                            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+                                for root, _, files in os.walk(target_dir):
+                                    for file in files:
+                                        full = os.path.join(root, file)
+                                        rel = os.path.relpath(full, target_dir).replace("\\", "/")
+                                        zf.write(full, rel)
+                            b_bytes = buf.getvalue()
+                            hdr = f"HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\nContent-Length: {len(b_bytes)}\r\nConnection: close\r\n\r\n".encode()
+                            conn.sendall(hdr + b_bytes)
+                        else:
+                            conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+
+                elif path == "/modpack/core_bundle":
+                    target = LAN_ACTIVE_VERSION_DIR
+                    if target and os.path.exists(target):
+                        v_name = resolve_clean_modpack_name(target, LAN_ACTIVE_VERSION_NAME)
+                        bundle_bytes = generate_core_bundle_bytes(target, v_name)
+                        hdr = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/zip\r\n"
+                            b"Content-Disposition: attachment; filename=core_bundle.zip\r\n"
+                            b"Content-Length: " + str(len(bundle_bytes)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n"
+                        )
+                        conn.sendall(hdr + bundle_bytes)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+
                 elif path == "/modpack/info":
                     m = get_active_modpack_manifest()
                     if m:
@@ -1604,14 +1990,22 @@ def start_lan_skin_service(username=None, version_dir=None):
     t_udp.start()
     LAN_TRIGGER_EVENT.set()
 
-def update_lan_skin_identity(username=None, version_dir=None):
+def update_lan_skin_identity(username=None, version_dir=None, version_name=None):
     """Updates the active user identity and profile version."""
-    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR
+    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR, LAN_ACTIVE_VERSION_NAME
     if username:
         LAN_ACTIVE_USER = username
     if version_dir:
         LAN_ACTIVE_VERSION_DIR = version_dir
+    if version_name:
+        LAN_ACTIVE_VERSION_NAME = version_name
+    elif version_dir and not LAN_ACTIVE_VERSION_NAME:
+        LAN_ACTIVE_VERSION_NAME = os.path.basename(version_dir)
     trigger_lan_skin_broadcast()
+
+def update_active_version(version_dir, version_name=None):
+    """Public hook to update active modpack context across P2P and LAN beacons."""
+    update_lan_skin_identity(None, version_dir, version_name)
 
 def trigger_lan_skin_broadcast():
     """Forces an immediate discovery probe across all LAN and Radmin networks."""

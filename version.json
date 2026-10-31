@@ -1,7 +1,7 @@
 {
-  "version": "2.4.2",
-  "commit_sha": "2895b3d",
+  "version": "2.4.3",
+  "commit_sha": "93b8aa3",
   "branch": "main",
-  "updated_at": "2026-10-30 17:38:31",
-  "release_notes": "feat: auto-updater engine, P2P custom modpack sync, 1-click friend join, and pixel-perfect UI boxes"
+  "updated_at": "2026-10-31 10:39:11",
+  "release_notes": "fix(p2p): bidirectional friend handshake, clean modpack naming, core bundle extraction, and fast gunpack streaming"
 }
