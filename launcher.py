@@ -5520,6 +5520,7 @@ def main():
     # Start Native Zero-Config LAN & Radmin P2P Skin Auto-Sync Service
     network_hub.start_lan_skin_service(cfg.get('username', 'Player'), version_dir)
     network_hub.update_active_version(version_dir, cfg.get('version_name'))
+    network_hub.start_cloud_presence_service(cfg.get('username', 'Player'))
     updater.start_background_update_checker()
 
     # Process CLI arguments if passed (e.g. python launcher.py /play or /install homestead)
@@ -5725,6 +5726,9 @@ def main():
                 else:
                     print(f"{C_CYAN}[Moon Launcher] Current player username:{CLR_RESET} {cfg.get('username', 'Player')}")
                     print(f"{C_MUTED}To change: /username <new_name> or /setting user <new_name>{CLR_RESET}\n")
+
+            elif cmd in ('/cloud', 'cloud', '/supabase', 'supabase'):
+                network_hub.handle_cloud_command(raw_parts[1:])
 
             elif cmd in ('/host', 'host', '/lan', 'lan', '/tunnel', 'tunnel'):
                 network_hub.handle_host_command(raw_parts[1:], version_dir)

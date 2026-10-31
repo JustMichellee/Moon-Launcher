@@ -1,7 +1,7 @@
 {
-  "version": "2.4.4",
-  "commit_sha": "2ac31e3",
+  "version": "2.4.5",
+  "commit_sha": "latest",
   "branch": "main",
-  "updated_at": "2026-10-31 12:27:56",
-  "release_notes": "feat: Player ID profile cards, moon://player/<id> protocol handler, and 1-click web launcher integration"
+  "updated_at": "2026-10-31 12:46:37",
+  "release_notes": "feat(cloud): Supabase Cloud Presence, global matchmaking without Radmin, and /cloud setup CLI"
 }

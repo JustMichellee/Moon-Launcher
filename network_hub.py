@@ -642,6 +642,185 @@ def get_tunnel_status():
 # COMMAND HANDLER: /friend
 # ==============================================================================
 
+
+# ==============================================================================
+# SUPABASE CLOUD PRESENCE & MATCHMAKING ENGINE
+# ==============================================================================
+
+def get_supabase_config():
+    """Retrieves configured Supabase URL and Anon Key from launcher config or environment."""
+    url = os.environ.get("MOON_SUPABASE_URL", "")
+    key = os.environ.get("MOON_SUPABASE_KEY", "")
+    
+    if not url or not key:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    url = url or d.get("supabase_url", "")
+                    key = key or d.get("supabase_key", "")
+        except Exception:
+            pass
+            
+    return url.strip().rstrip('/'), key.strip()
+
+def set_supabase_config(url, key):
+    """Saves Supabase credentials into launcher_config.json."""
+    try:
+        import launcher
+        cfg = launcher.load_config()
+        cfg["supabase_url"] = str(url).strip().rstrip('/')
+        cfg["supabase_key"] = str(key).strip()
+        launcher.save_config(cfg)
+        return True
+    except Exception:
+        return False
+
+def supabase_api_request(endpoint, method="GET", payload=None, extra_headers=None):
+    """Executes a HTTPS REST request against Supabase PostgREST API."""
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return None
+        
+    target = f"{sb_url}/rest/v1/{endpoint}"
+    body = json.dumps(payload).encode('utf-8') if payload is not None else None
+    headers = {
+        "apikey": sb_key,
+        "Authorization": f"Bearer {sb_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "Moon-Launcher-Cloud/1.0"
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+        
+    req = urllib.request.Request(target, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            raw = resp.read().decode('utf-8')
+            return json.loads(raw) if raw.strip() else {}
+    except Exception:
+        return None
+
+def cloud_update_presence(username=None):
+    """Pushes active player presence, modpack, and server address to Supabase cloud."""
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return False
+        
+    u_name = username or LAN_ACTIVE_USER or "Player"
+    v_dir = LAN_ACTIVE_VERSION_DIR
+    m = get_active_modpack_manifest(v_dir) if v_dir else None
+    v_name = m["version_name"] if m else (LAN_ACTIVE_VERSION_NAME or "Unknown Modpack")
+    mc_ver = m["mc_version"] if m else "1.20.1"
+    loader = m["loader"] if m else "Forge"
+    m_cnt = m["mod_count"] if m else 0
+    
+    t_status = get_tunnel_status()
+    pub_addr = t_status.get("public_address") if t_status.get("running") else ""
+    is_hosting = bool(pub_addr)
+    status_str = "hosting" if is_hosting else "online"
+    
+    payload = {
+        "username": u_name,
+        "player_id": u_name.lower().replace(" ", "_"),
+        "status": status_str,
+        "version_name": v_name,
+        "mc_version": mc_ver,
+        "loader": loader,
+        "mod_count": m_cnt,
+        "server_addr": pub_addr or "",
+        "tunnel_active": is_hosting,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    
+    res = supabase_api_request("presence", method="POST", payload=payload, extra_headers={"Prefer": "resolution=merge-duplicates"})
+    return res is not None
+
+def cloud_get_friends_presence(usernames_list):
+    """Fetches real-time status of given usernames from Supabase presence table."""
+    if not usernames_list:
+        return {}
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return {}
+        
+    names_quoted = ",".join(f'"{u}"' for u in usernames_list)
+    endpoint = f"presence?username=in.({urllib.parse.quote(names_quoted)})"
+    res = supabase_api_request(endpoint, method="GET")
+    
+    if isinstance(res, list):
+        now = time.time()
+        mapping = {}
+        with CLOUD_PEERS_LOCK:
+            for item in res:
+                uname = item.get("username")
+                if uname:
+                    CLOUD_PEERS[uname.lower()] = {
+                        "username": uname,
+                        "status": item.get("status", "online"),
+                        "version_name": item.get("version_name", ""),
+                        "mc_version": item.get("mc_version", ""),
+                        "loader": item.get("loader", ""),
+                        "mod_count": item.get("mod_count", 0),
+                        "server_addr": item.get("server_addr", ""),
+                        "last_seen": now
+                    }
+                    mapping[uname.lower()] = CLOUD_PEERS[uname.lower()]
+        return mapping
+    return {}
+
+def cloud_lookup_player(player_id_or_name):
+    """Queries live presence or profile of any player globally by ID or username."""
+    if not player_id_or_name:
+        return None
+    clean = str(player_id_or_name).strip()
+    
+    endpoint = f"presence?or=(username.ilike.{urllib.parse.quote(clean)},player_id.ilike.{urllib.parse.quote(clean)})&limit=1"
+    res = supabase_api_request(endpoint, method="GET")
+    if isinstance(res, list) and res:
+        item = res[0]
+        return {
+            "username": item.get("username", clean),
+            "status": item.get("status", "online"),
+            "version_name": item.get("version_name", ""),
+            "mc_version": item.get("mc_version", ""),
+            "loader": item.get("loader", ""),
+            "mod_count": item.get("mod_count", 0),
+            "server_addr": item.get("server_addr", "")
+        }
+    return None
+
+def _cloud_presence_loop():
+    """Background loop that periodically refreshes player presence and friends status."""
+    global CLOUD_SYNC_RUNNING
+    while CLOUD_SYNC_RUNNING:
+        try:
+            cloud_update_presence()
+            # Refresh friends presence
+            d = load_network_data()
+            f_names = [f.get("username") for f in d.get("friends", []) if f.get("username")]
+            if f_names:
+                cloud_get_friends_presence(f_names)
+        except Exception:
+            pass
+        time.sleep(25.0)
+
+def start_cloud_presence_service(username=None):
+    """Starts the background Supabase cloud presence service."""
+    global CLOUD_SYNC_RUNNING
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return False
+        
+    if CLOUD_SYNC_RUNNING:
+        return True
+        
+    CLOUD_SYNC_RUNNING = True
+    t = threading.Thread(target=_cloud_presence_loop, daemon=True, name="MoonCloudPresence")
+    t.start()
+    return True
+
 def show_player_profile_card(player_id, active_version_dir=None):
     """
     Renders an interactive Player Profile Card for the specified player ID or username,
@@ -657,10 +836,16 @@ def show_player_profile_card(player_id, active_version_dir=None):
     friends = data.get("friends", [])
     matched_friend = next((f for f in friends if f.get("username", "").lower() == clean_id.lower()), None)
     
-    # 2. Lookup in LAN & Radmin peers (LAN_PEERS)
+    # 2. Lookup in LAN & Radmin peers (LAN_PEERS) or Cloud Presence (Supabase)
     peer_meta = None
     with LAN_PEERS_LOCK:
         peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == clean_id.lower()), None)
+
+    if not peer_meta:
+        with CLOUD_PEERS_LOCK:
+            peer_meta = CLOUD_PEERS.get(clean_id.lower())
+    if not peer_meta:
+        peer_meta = cloud_lookup_player(clean_id)
         
     display_name = (matched_friend.get("username") if matched_friend else None) or (peer_meta.get("username") if peer_meta else None) or clean_id
     v_name = (peer_meta.get("version_name") if peer_meta else None) or "Unknown Modpack"
@@ -829,6 +1014,12 @@ def handle_friend_command(args, active_version_dir=None):
                 peer_meta = None
                 with LAN_PEERS_LOCK:
                     peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == u_name.lower()), None)
+                if not peer_meta:
+                    with CLOUD_PEERS_LOCK:
+                        peer_meta = CLOUD_PEERS.get(u_name.lower())
+                if not peer_meta:
+                    with CLOUD_PEERS_LOCK:
+                        peer_meta = CLOUD_PEERS.get(u_name.lower())
 
                 if peer_meta and peer_meta.get("version_name"):
                     v_name = peer_meta.get("version_name")
@@ -1088,6 +1279,22 @@ def handle_friend_command(args, active_version_dir=None):
                     peer_ver = p.get("version_name")
                     peer_srv = p.get("server_addr")
                     break
+        if not peer_srv:
+            with CLOUD_PEERS_LOCK:
+                cp = CLOUD_PEERS.get(target_name.lower())
+                if cp and cp.get("server_addr"):
+                    peer_srv = cp.get("server_addr")
+                    peer_ver = cp.get("version_name")
+                    if ":" in peer_srv:
+                        peer_ip = peer_srv.split(":")[0]
+        if not peer_srv:
+            with CLOUD_PEERS_LOCK:
+                cp = CLOUD_PEERS.get(target_name.lower())
+                if cp and cp.get("server_addr"):
+                    peer_srv = cp.get("server_addr")
+                    peer_ver = cp.get("version_name")
+                    if ":" in peer_srv:
+                        peer_ip = peer_srv.split(":")[0]
                     
         matched_friend = next((f for f in friends if f.get("username", "").lower() == target_name.lower()), None)
         if not peer_ip and matched_friend and matched_friend.get("address"):
@@ -1203,6 +1410,55 @@ def handle_friend_command(args, active_version_dir=None):
 # ==============================================================================
 # COMMAND HANDLER: /host
 # ==============================================================================
+
+def handle_cloud_command(args=None):
+    """CLI handler for /cloud commands to configure or check Supabase cloud status."""
+    box_w = 68
+    url, key = get_supabase_config()
+    sub = args[0].lower() if args else "status"
+
+    if sub in ("setup", "config", "set"):
+        print(f"\n{C_WHITE}\033[1mMoon Launcher Cloud Setup (Supabase)\033[0m")
+        print(f"{C_MUTED}Enter your Supabase Project URL and Anon Public Key from supabase.com:{CLR_RESET}\n")
+        try:
+            new_url = input(f"{C_CYAN}Supabase Project URL (e.g. https://xyz.supabase.co): {CLR_RESET}").strip()
+            new_key = input(f"{C_CYAN}Supabase Anon Public Key (eyJh...): {CLR_RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return
+        if new_url and new_key:
+            if set_supabase_config(new_url, new_key):
+                start_cloud_presence_service()
+                print(f"\n{C_GREEN}[OK] Supabase Cloud configured successfully!{CLR_RESET}\n")
+            else:
+                print(f"\n{C_RED}[Error] Failed to save cloud configuration.{CLR_RESET}\n")
+        else:
+            print(f"\n{C_AMBER}Setup cancelled. Both URL and Key are required.{CLR_RESET}\n")
+        return
+
+    # Status
+    lines = [
+        f"{C_WHITE}\033[1mMoon Cloud Presence & Global Friends Status\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+    ]
+    if url and key:
+        masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_GREEN}CONNECTED (Supabase REST & Realtime){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Project URL    :{CLR_RESET} {C_CYAN}{url}{CLR_RESET}")
+        lines.append(f"  {C_WHITE}* API Key        :{CLR_RESET} {C_MUTED}{masked_key}{CLR_RESET}")
+        with CLOUD_PEERS_LOCK:
+            online_cnt = len(CLOUD_PEERS)
+        lines.append(f"  {C_WHITE}* Global Peers   :{CLR_RESET} {C_GREEN}{online_cnt} players tracked online{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /cloud setup (Reconfigure) • /friend list (View Friends){CLR_RESET}")
+    else:
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_AMBER}NOT CONFIGURED (Running local LAN mode){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Description    :{CLR_RESET} {C_MUTED}Connect to Supabase to enable global friends & mabar without Radmin!{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_CYAN}To connect your free Supabase database:{CLR_RESET}")
+        lines.append(f"  Type: {C_GREEN}/cloud setup{CLR_RESET}")
+
+    print("\n" + render_box(lines, box_w, title="Cloud Hub") + "\n")
 
 def handle_host_command(args, active_version_dir=None):
     """
@@ -1413,6 +1669,9 @@ LAN_ACTIVE_VERSION_NAME = None
 LAN_PEERS_LOCK = threading.Lock()
 LAN_PEERS = {}  # {username: {'ip': str, 'port': int, 'hash': str, 'last_seen': float, 'synced': bool}}
 LAN_TRIGGER_EVENT = threading.Event()
+CLOUD_PEERS_LOCK = threading.Lock()
+CLOUD_PEERS = {}  # {username: {'status': str, 'version_name': str, 'server_addr': str, 'last_seen': float}}
+CLOUD_SYNC_RUNNING = False
 
 def get_broadcast_targets():
     """Detects local broadcast targets across WiFi, Ethernet, and virtual LANs (Radmin VPN, Tailscale, ZeroTier)."""
