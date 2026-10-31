@@ -5557,8 +5557,8 @@ def main():
         elif arg_cmd in ('/host', 'host', '/lan', 'lan', '/tunnel', 'tunnel'):
             network_hub.handle_host_command(sys.argv[2:], version_dir)
             return
-        elif arg_cmd.startswith(('moon://', 'https://moonlauncher.link/', 'http://moonlauncher.link/')) or ('user=' in arg_cmd and 'addr=' in arg_cmd):
-            network_hub.handle_friend_command(['add', sys.argv[1]], version_dir)
+        elif arg_cmd.startswith(('moon://', 'https://moonlauncher.link/', 'http://moonlauncher.link/', 'https://moonlauncher.app/')) or ('user=' in arg_cmd and 'addr=' in arg_cmd):
+            network_hub.handle_moon_protocol_url(sys.argv[1], version_dir)
             print(f"\n{C_MUTED}Press ENTER to exit...{CLR_RESET}", end="", flush=True)
             try: input()
             except (KeyboardInterrupt, EOFError): pass
@@ -5734,6 +5734,10 @@ def main():
 
             elif cmd in ('/update', 'update', '/upgrade', 'upgrade'):
                 updater.handle_update_command(raw_parts[1:], version_dir, cfg)
+
+            elif cmd in ('/player', 'player', '/profile', 'profile', '/whois', 'whois'):
+                target_id = raw_parts[1] if len(raw_parts) > 1 else cfg.get('username')
+                network_hub.show_player_profile_card(target_id, version_dir)
 
             elif cmd in ('/friend', 'friend', '/friends', 'friends'):
                 network_hub.handle_friend_command(raw_parts[1:], version_dir)

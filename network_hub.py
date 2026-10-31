@@ -642,6 +642,143 @@ def get_tunnel_status():
 # COMMAND HANDLER: /friend
 # ==============================================================================
 
+def show_player_profile_card(player_id, active_version_dir=None):
+    """
+    Renders an interactive Player Profile Card for the specified player ID or username,
+    with 1-click Join, Sync, and Add Friend actions.
+    """
+    if not player_id:
+        return
+    clean_id = str(player_id).strip().strip('"').strip("'").lstrip('@')
+    tag = clean_id[:3].upper() + "-" + str(abs(hash(clean_id)) % 9000 + 1000)
+    
+    # 1. Lookup in contacts (friends.json)
+    data = load_network_data()
+    friends = data.get("friends", [])
+    matched_friend = next((f for f in friends if f.get("username", "").lower() == clean_id.lower()), None)
+    
+    # 2. Lookup in LAN & Radmin peers (LAN_PEERS)
+    peer_meta = None
+    with LAN_PEERS_LOCK:
+        peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == clean_id.lower()), None)
+        
+    display_name = (matched_friend.get("username") if matched_friend else None) or (peer_meta.get("username") if peer_meta else None) or clean_id
+    v_name = (peer_meta.get("version_name") if peer_meta else None) or "Unknown Modpack"
+    m_cnt = peer_meta.get("mod_count", 0) if peer_meta else 0
+    srv_target = (peer_meta.get("server_addr") if peer_meta else None) or (matched_friend.get("address") if matched_friend else None) or ""
+
+    # Determine Live Status
+    if peer_meta and peer_meta.get("server_addr"):
+        status_str = f"{C_GREEN}[PLAYING]{CLR_RESET} Hosting world online"
+    elif peer_meta:
+        status_str = f"{C_GREEN}[ONLINE ]{CLR_RESET} Active in Moon Launcher"
+    elif srv_target:
+        p_res = ping_minecraft_server(srv_target, timeout=1.5)
+        if p_res["online"]:
+            status_str = f"{C_GREEN}[ONLINE ]{CLR_RESET} Server online ({p_res['latency']}ms)"
+        else:
+            status_str = f"{C_RED}[IDLE   ]{CLR_RESET} Server offline or host world closed"
+    else:
+        status_str = f"{C_MUTED}[OFFLINE]{CLR_RESET} No active session detected"
+
+    # Determine Relationship
+    if matched_friend:
+        rel_str = f"{C_GREEN}Mutual Friend (In contacts){CLR_RESET}"
+    else:
+        rel_str = f"{C_CYAN}New Player (Not in contacts yet){CLR_RESET}"
+
+    box_w = 68
+    lines = [
+        f"{C_WHITE}\033[1mPlayer Profile & Session Overview\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}* Player Identity :{CLR_RESET} {C_CYAN}\033[1m{display_name}\033[0m {C_MUTED}(#{tag}){CLR_RESET}",
+        f"  {C_WHITE}* Status          :{CLR_RESET} {status_str}",
+        f"  {C_WHITE}* Active Modpack  :{CLR_RESET} {C_WHITE}\033[1m{v_name}\033[0m {C_AMBER}({m_cnt} mods){CLR_RESET}",
+    ]
+    if srv_target:
+        lines.append(f"  {C_WHITE}* Game Server     :{CLR_RESET} {C_GREEN}{srv_target}{CLR_RESET}")
+    else:
+        lines.append(f"  {C_WHITE}* Game Server     :{CLR_RESET} {C_MUTED}None (Host hasn't opened /host){CLR_RESET}")
+    lines.extend([
+        f"  {C_WHITE}* Relationship    :{CLR_RESET} {rel_str}",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}\033[1mQuick Actions:\033[0m",
+        f"  {C_CYAN}[1]{CLR_RESET} {C_WHITE}Join Game{CLR_RESET}    {C_MUTED}(Launch Minecraft & auto-connect to world){CLR_RESET}",
+        f"  {C_CYAN}[2]{CLR_RESET} {C_WHITE}Sync Modpack{CLR_RESET} {C_MUTED}(Install/Update {v_name} via P2P){CLR_RESET}",
+        f"  {C_CYAN}[3]{CLR_RESET} {C_WHITE}Add Friend{CLR_RESET}   {C_MUTED}(Add to contacts & send mutual handshake){CLR_RESET}",
+        f"  {C_MUTED}[0] Close Profile Card{CLR_RESET}",
+    ])
+
+    print("\n" + render_box(lines, box_w, title=f"Player: {display_name}") + "\n")
+
+    try:
+        act = input(f"{C_WHITE}Select action [1/2/3/0]: {CLR_RESET}").strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return
+
+    if act == '1':
+        handle_friend_command(['join', display_name], active_version_dir)
+    elif act == '2':
+        handle_friend_command(['sync', display_name], active_version_dir)
+    elif act == '3':
+        handle_friend_command(['add', display_name], active_version_dir)
+    else:
+        print(f"{C_MUTED}Closed profile card.{CLR_RESET}\n")
+
+def handle_moon_protocol_url(url, active_version_dir=None):
+    """
+    Dispatcher for moon:// Windows protocol handler and web deep links:
+    - moon://player/<id> or moon://profile/<id> or moon://u/<id> -> show_player_profile_card
+    - moon://join/<name> -> handle_friend_command(['join', name])
+    - moon://install/<modpack_slug> -> launcher installer
+    - moon://friend/add?... or moon://invite/... -> handle_friend_command(['add', url])
+    """
+    if not url:
+        return
+    raw = str(url).strip().strip('"').strip("'")
+    parsed = urllib.parse.urlparse(raw)
+    
+    netloc = parsed.netloc.lower()
+    path = parsed.path.strip('/')
+    
+    # 1. Player Profile URL
+    if netloc in ('player', 'profile', 'u') or path.startswith(('player/', 'profile/', 'p/', 'u/')):
+        target_id = path.split('/')[-1] if '/' in path else (path or netloc)
+        if target_id in ('player', 'profile', 'u'):
+            target_id = path.split('/')[-1] if '/' in path else ""
+        if not target_id and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_id = qs.get('id', qs.get('user', ['']))[0]
+        if target_id:
+            show_player_profile_card(target_id, active_version_dir)
+            return
+
+    # 2. Direct Join URL
+    if netloc in ('join', 'mabar') or (netloc == 'friend' and 'join' in path):
+        target_name = path.split('/')[-1] if '/' in path and path != 'join' else ""
+        if not target_name and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_name = qs.get('user', qs.get('name', ['']))[0]
+        if target_name:
+            handle_friend_command(['join', target_name], active_version_dir)
+            return
+
+    # 3. Modpack Install URL
+    if netloc in ('install', 'modpack', 'pack') or path.startswith(('install/', 'modpack/')):
+        pack_slug = path.split('/')[-1] if '/' in path else path
+        if not pack_slug and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            pack_slug = qs.get('id', qs.get('slug', ['']))[0]
+        if pack_slug:
+            import launcher
+            cfg = launcher.load_config(active_version_dir)
+            launcher.handle_install_command(['install', pack_slug], active_version_dir, cfg)
+            return
+
+    # 4. Fallback to friend invite / link
+    handle_friend_command(['add', raw], active_version_dir)
+
 def handle_friend_command(args, active_version_dir=None):
     """
     Handles /friend commands:
