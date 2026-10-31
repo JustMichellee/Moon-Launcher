@@ -960,8 +960,12 @@ def handle_friend_command(args, active_version_dir=None):
             peer_srv = matched_friend["address"]
             
         if not peer_ip:
-            print(f"\n{C_AMBER}Friend '{target_name}' is not currently detected online via LAN/Radmin.{CLR_RESET}")
-            print(f"{C_MUTED}Make sure both of you have Moon Launcher open on the same network.{CLR_RESET}\n")
+            print(f"\n{C_AMBER}Friend '{target_name}' is not detected on local network or contacts.{CLR_RESET}")
+            print(f"{C_CYAN}If playing over Internet (No Radmin / Hamachi needed):{CLR_RESET}")
+            print(f"  1. Ask {target_name} to run {C_WHITE}/host start{C_CYAN} in Moon Launcher")
+            print(f"  2. Ask {target_name} to type {C_WHITE}/friend invite{C_CYAN} and send you the link")
+            print(f"  3. Add the link: {C_GREEN}/friend add [invite_link]{CLR_RESET}")
+            print(f"  4. Type {C_GREEN}/friend join {target_name}{CLR_RESET} to connect directly!\n")
             return
             
         box_w = 68
