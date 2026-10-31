@@ -1,6 +1,6 @@
 {
   "version": "2.4.4",
-  "commit_sha": "b21f209",
+  "commit_sha": "2ac31e3",
   "branch": "main",
   "updated_at": "2026-10-31 12:27:56",
   "release_notes": "feat: Player ID profile cards, moon://player/<id> protocol handler, and 1-click web launcher integration"
