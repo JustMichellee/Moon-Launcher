@@ -1,7 +1,7 @@
 {
-  "version": "2.4.5",
-  "commit_sha": "3d70d61",
+  "version": "2.5.0",
+  "commit_sha": "67d1f5a",
   "branch": "main",
-  "updated_at": "2026-10-31 12:46:37",
-  "release_notes": "feat(cloud): Supabase Cloud Presence, global matchmaking without Radmin, and /cloud setup CLI"
+  "updated_at": "2026-11-05 17:10:00",
+  "release_notes": "feat: live P2P & Public Anycast Modpack Sharing with short MOON-PACK-XXXX codes, Fabric 0.19.3 mixin fix, independent skin system, and solid green progress bar (#90EE90)"
 }
