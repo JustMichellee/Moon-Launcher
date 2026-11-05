@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moon Launcher - Minecraft Studio GUI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-container">
+      <div class="brand-icon" title="Moon Launcher Studio">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </div>
+      <div>
+        <div class="brand-title">MOON LAUNCHER</div>
+        <div class="brand-subtitle">Minecraft Studio Desktop</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" aria-label="Main Navigation">
+      <button class="tab-btn active" data-tab="view-play" id="tab-nav-play">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Play & Instances</span>
+      </button>
+      <button class="tab-btn" data-tab="view-mods" id="tab-nav-mods">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <span>Mod Manager</span>
+      </button>
+      <button class="tab-btn" data-tab="view-catalog" id="tab-nav-catalog">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        <span>Mod Browser</span>
+      </button>
+      <button class="tab-btn" data-tab="view-multiplayer" id="tab-nav-multiplayer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+        <span>Servers & Multiplayer</span>
+      </button>
+      <button class="tab-btn" data-tab="view-crash" id="tab-nav-crash">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+        <span>Crash & Logs</span>
+      </button>
+      <button class="tab-btn" data-tab="view-settings" id="tab-nav-settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Settings & System</span>
+      </button>
+    </nav>
+
+    <!-- Header Player Profile Chip -->
+    <div class="header-player-chip" id="header-player-chip" title="Click to customize Skin & Identity">
+      <img src="https://minotar.net/bust/Steve/64.png" alt="Avatar" class="header-player-avatar" id="header-avatar-img">
+      <span class="header-player-name" id="header-player-name">Player</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+  </header>
+
+  <!-- Main Viewports -->
+  <main class="main-content">
+
+    <!-- VIEW 1: PLAY & INSTANCES -->
+    <section id="view-play" class="view-panel active">
+      
+      <!-- Top Row: Hero Launch & Active Profile -->
+      <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px; margin-bottom: 24px;">
+        
+        <!-- Left: Hero Launch Panel -->
+        <div class="card-panel" style="display: flex; flex-direction: column; justify-content: space-between; padding: 26px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+              <div>
+                <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 6px;">ACTIVE MINECRAFT INSTANCE</span>
+                <h2 style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.02em;" id="display-version-title">Loading Version...</h2>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary" id="btn-quick-refresh" title="Refresh instances" style="padding: 7px 12px; font-size: 0.84rem;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                  <span>Refresh</span>
+                </button>
+                <button class="btn btn-mint" id="btn-quick-test" title="Run Preflight Check" style="padding: 7px 12px; font-size: 0.84rem;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  <span>Preflight / Test</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Version Switcher Dropdown -->
+            <div style="margin-bottom: 18px;">
+              <label for="select-active-version" style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px; color: var(--ink-secondary);">
+                Switch Active Installed Instance:
+              </label>
+              <select id="select-active-version" class="tactile-select">
+                <option value="">Scanning installed versions...</option>
+              </select>
+            </div>
+
+            <!-- Active Version Details Pill Strip -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;" id="active-version-badges">
+              <span class="badge-tag" id="badge-loader">Loader: Scanning</span>
+              <span class="badge-tag" id="badge-mc-ver">MC: Unknown</span>
+              <span class="badge-tag" id="badge-mod-count">Mods: 0</span>
+              <span class="badge-tag" id="badge-disk-size">Size: 0 MB</span>
+            </div>
+
+            <!-- Quick Directory Openers Strip -->
+            <div style="margin-bottom: 20px;">
+              <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 6px;">Quick Folder Access:</div>
+              <div class="quick-folder-grid">
+                <button class="folder-pill-btn" data-folder="mods">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
+                  <span>Mods</span>
+                </button>
+                <button class="folder-pill-btn" data-folder="saves">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  <span>Saves / Worlds</span>
+                </button>
+                <button class="folder-pill-btn" data-folder="screenshots">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                  <span>Screenshots</span>
+                </button>
+                <button class="folder-pill-btn" data-folder="logs">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>Logs</span>
+                </button>
+                <button class="folder-pill-btn" data-folder="crash">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/></svg>
+                  <span>Crash Reports</span>
+                </button>
+                <button class="folder-pill-btn" data-folder="version">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                  <span>Open Folder</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Giant Launch Button -->
+          <div>
+            <button class="btn-play-hero" id="btn-launch-game">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span id="launch-btn-label">PLAY MINECRAFT</span>
+            </button>
+            <p style="text-align: center; font-size: 0.80rem; color: var(--ink-muted); margin-top: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+              <span>Direct smooth launch with auto crash watchdog</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Right: Player Profile & Fast RAM (Tidily aligned to left panel height) -->
+        <div style="display: flex; flex-direction: column; justify-content: space-between; gap: 16px; height: 100%;">
+          
+          <!-- Player Profile Box -->
+          <div class="card-panel-peri" style="display: flex; flex-direction: column; justify-content: space-between; padding: 22px; flex: 1.15;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 78px; height: 78px; background: #ffffff; border: 2.5px solid var(--ink-primary); border-radius: 10px; box-shadow: 2.5px 2.5px 0px var(--ink-primary); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+                <img src="https://minotar.net/bust/Steve/128.png" id="dash-avatar-bust" alt="3D Player Bust" style="width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated;">
+              </div>
+              <div style="flex: 1; overflow: hidden;">
+                <span class="badge-tag" style="background: #ffffff; margin-bottom: 4px;">PLAYER IDENTITY</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <div style="font-size: 1.25rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="dash-username-display">Player</div>
+                  <span class="badge-tag" id="dash-moon-id-badge" style="background: var(--pal-mint); font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer; padding: 2px 7px;" title="Click to copy your Moon ID">MOON-4821</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <input type="text" id="input-quick-username" class="tactile-input" placeholder="New username..." style="padding: 6px 10px; font-size: 0.86rem;">
+                  <button class="btn btn-primary" id="btn-save-username" style="padding: 6px 12px; font-size: 0.84rem; flex-shrink: 0;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Save</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-white" id="btn-open-skin-modal" style="margin-top: 14px; padding: 8px 12px; font-size: 0.84rem; width: 100%;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Customize Skin & Cape</span>
+            </button>
+          </div>
+
+          <!-- Quick RAM Allocator -->
+          <div class="card-panel" style="padding: 20px; display: flex; flex-direction: column; justify-content: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 900; font-size: 0.98rem;">Allocated RAM Memory</span>
+              <span class="badge-tag" id="display-ram-val" style="background: var(--pal-coral); font-size: 0.85rem;">8 GB</span>
+            </div>
+            <input type="range" id="slider-quick-ram" min="2" max="32" step="1" value="8">
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; font-weight: 800; color: var(--ink-muted); margin-top: 6px;">
+              <span>2 GB (Vanilla)</span>
+              <span>8 GB (Optimal)</span>
+              <span>32 GB (Heavy)</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Bottom Row: Installed Instances Grid -->
+      <div class="card-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="font-size: 1.35rem; font-weight: 900; letter-spacing: -0.01em;">All Installed Modpacks & Instances</h3>
+            <p style="font-size: 0.86rem; color: var(--ink-secondary); font-weight: 600;">Switch active version, launch directly, inspect folders, or delete unused instances to reclaim disk space.</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-mint" id="btn-open-share-modal" title="Bagi modpack ke teman via kode online" style="padding: 7px 12px; font-size: 0.82rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+              <span>Share Modpack</span>
+            </button>
+            <button class="btn btn-primary" id="btn-open-import-modal" title="Terima modpack teman menggunakan kode MOON-PACK-XXXX" style="padding: 7px 12px; font-size: 0.82rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span>Terima Modpack (Code)</span>
+            </button>
+            <span class="badge-tag" style="background: var(--pal-cream);" id="total-instances-badge">0 Instances</span>
+          </div>
+        </div>
+
+        <div class="instances-grid" id="instances-card-grid">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- VIEW 2: MOD MANAGER STUDIO -->
+    <section id="view-mods" class="view-panel">
+      <div class="card-panel" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+          <div>
+            <h2 style="font-size: 1.6rem; font-weight: 900;" id="mods-studio-title">Instance Mods</h2>
+            <p style="font-size: 0.88rem; color: var(--ink-secondary); font-weight: 600; margin-top: 2px;">
+              Manage mods for the active instance. Toggle mods ON/OFF instantly without redownloading, or move unused mods to safe backup.
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="btn-mods-open-folder">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span>Open Mods Folder</span>
+            </button>
+            <button class="btn btn-mint" id="btn-mods-refresh">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              <span>Refresh Mods</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <input type="text" id="input-mod-search" class="tactile-input" placeholder="Search mods by name (e.g. Sodium, Create, JEI, Iris, Ferrite)...">
+          <span class="badge-tag" id="mods-count-pill" style="background: var(--pal-mint); font-size: 0.85rem; padding: 10px 14px; flex-shrink: 0;">0 Mods</span>
+        </div>
+      </div>
+
+      <!-- Mod Items Container -->
+      <div id="mods-list-container" style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="text-align: center; padding: 40px; font-weight: 700; color: var(--ink-muted);">Loading mods...</div>
+      </div>
+    </section>
+
+
+    <!-- VIEW 3: MOD BROWSER -->
+    <section id="view-catalog" class="view-panel">
+      <!-- Header Banner matching Website -->
+      <div style="margin-bottom: 24px;">
+        <h1 style="font-size: 1.85rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 4px; color: var(--ink-primary);">
+          Mods, Modpacks & Shaders Catalog
+        </h1>
+        <p style="color: var(--ink-secondary); font-size: 0.94rem; font-weight: 600;">
+          Discover and explore thousands of community-curated Minecraft mods, modpacks, and shader packs.
+        </p>
+      </div>
+
+      <!-- Tactile Search & Filter Card matching Website explore page -->
+      <div class="card-panel" style="margin-bottom: 24px; padding: 22px; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <!-- Search Input with Search Icon -->
+          <div style="flex: 1; min-width: 260px; position: relative; display: flex; align-items: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; pointer-events: none;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="catalog-search-input" class="tactile-input" placeholder="Search packages (e.g. Create, Better MC, Cobblemon, Sodium, JEI)..." style="padding-left: 44px; width: 100%;">
+          </div>
+
+          <!-- Custom Sort Dropdown -->
+          <div style="position: relative; display: inline-block;" id="catalog-sort-container">
+            <button type="button" class="btn btn-white" id="catalog-sort-btn" style="padding: 10px 16px; font-size: 0.90rem; gap: 8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              <span id="catalog-sort-label">Most Relevant</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" id="catalog-sort-chevron"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+
+            <ul class="tactile-dropdown-menu" id="catalog-sort-menu" style="display: none;">
+              <li class="tactile-dropdown-item active" data-sort="relevance">
+                <span>Most Relevant</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </li>
+              <li class="tactile-dropdown-item" data-sort="downloads"><span>Most Downloads</span></li>
+              <li class="tactile-dropdown-item" data-sort="follows"><span>Most Followed</span></li>
+              <li class="tactile-dropdown-item" data-sort="newest"><span>Recently Added</span></li>
+              <li class="tactile-dropdown-item" data-sort="updated"><span>Recently Updated</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Category Tabs with Exact Vector Icons -->
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; border-top: 2px solid var(--ink-primary); padding-top: 16px;" id="catalog-category-filters">
+          <button class="btn btn-peri catalog-cat-btn" data-type="all">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+            <span>All Packages</span>
+          </button>
+          <button class="btn btn-white catalog-cat-btn" data-type="modpack">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+            <span>Modpacks</span>
+          </button>
+          <button class="btn btn-white catalog-cat-btn" data-type="mod">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>Mods</span>
+          </button>
+          <button class="btn btn-white catalog-cat-btn" data-type="resourcepack">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m14 12 5-5-3-3-5 5"/><path d="m14 12-9 9a2 2 0 0 1-2.83-2.83l9-9"/><path d="M18 10l-1.5 1.5"/></svg>
+            <span>Resource Packs</span>
+          </button>
+          <button class="btn btn-white catalog-cat-btn" data-type="shader">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <span>Shaders</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Header matching Website -->
+      <div id="catalog-results-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--ink-primary);">Indexed Packages</h2>
+          <div style="font-size: 0.88rem; color: var(--ink-secondary); margin-top: 2px; font-weight: 600;" id="catalog-results-sub">
+            Showing <strong style="color: var(--ink-primary); font-weight: 900;" id="catalog-sub-count">0</strong> of <span id="catalog-sub-total">0</span> packages found (Page <span id="catalog-sub-page">1</span> of <span id="catalog-sub-maxpage">1</span>)
+          </div>
+        </div>
+      </div>
+
+      <!-- Catalog Results Grid -->
+      <div class="catalog-grid" id="catalog-results-grid">
+        <div style="text-align: center; padding: 40px; grid-column: 1 / -1; font-weight: 700; color: var(--ink-muted);">
+          Loading packages...
+        </div>
+      </div>
+
+      <!-- Numbered Pagination Bar matching Website -->
+      <div class="catalog-pagination" id="catalog-pagination-container">
+        <!-- Generated by JS -->
+      </div>
+    </section>
+
+
+    <!-- VIEW 4: SERVERS & MULTIPLAYER STUDIO -->
+    <section id="view-multiplayer" class="view-panel">
+      <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px;">
+        
+        <!-- Left: Saved Servers List & Ping -->
+        <div class="card-panel">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 4px;">SERVER BROWSER</span>
+              <h3 style="font-size: 1.35rem; font-weight: 900;">Favorite Multiplayer Servers</h3>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary" id="btn-servers-refresh" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                <span>Ping All</span>
+              </button>
+              <button class="btn btn-primary" id="btn-open-add-server-modal" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                <span>Add Server</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Server List -->
+          <div id="servers-list-container" style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="text-align: center; padding: 30px; font-weight: 700; color: var(--ink-muted);">Pinging saved servers...</div>
+          </div>
+        </div>
+
+        <!-- Right: Host World Tunnel & Cloud Sync -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          
+          <!-- Host World Card -->
+          <div class="card-panel-peri">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <h3 style="font-size: 1.25rem; font-weight: 900;">Host World & Internet Tunnel</h3>
+            </div>
+            <p style="font-size: 0.88rem; font-weight: 600; line-height: 1.5; margin-bottom: 16px;">
+              Play multiplayer with friends anywhere in the world! Moon Launcher starts an encrypted Internet tunnel (Playit / Bore / Ngrok) directly from your Singleplayer world without Hamachi or Radmin.
+            </p>
+            <button class="btn btn-primary" id="btn-launch-host-tunnel" style="width: 100%; padding: 12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
+              <span>Open Host World & Tunnel Studio</span>
+            </button>
+          </div>
+
+          <!-- Cloud Presence & Friends -->
+          <div class="card-panel">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <h3 style="font-size: 1.2rem; font-weight: 900;">Cloud Presence & Friends</h3>
+            </div>
+            <p style="font-size: 0.86rem; color: var(--ink-secondary); font-weight: 600; margin-bottom: 16px;">
+              Share your direct launcher invite link with friends to auto-connect to your sessions.
+            </p>
+
+            <button class="btn btn-secondary" id="btn-copy-invite-link" style="width: 100%; margin-bottom: 16px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              <span>Copy Moon Invite Link</span>
+            </button>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <input type="text" id="input-friend-add" class="tactile-input" placeholder="Add friend username...">
+              <button class="btn btn-primary" id="btn-friend-add">
+                <span>Add</span>
+              </button>
+            </div>
+            <div id="friends-presence-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- VIEW 5: CRASH DIAGNOSTICS & LOGS -->
+    <section id="view-crash" class="view-panel">
+      <div style="display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px;">
+        
+        <!-- Left: Crash Analysis Card -->
+        <div class="card-panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+              <div>
+                <span class="badge-tag" style="background: var(--pal-coral); margin-bottom: 6px;">AUTOMATED DIAGNOSTICS</span>
+                <h3 style="font-size: 1.35rem; font-weight: 900;">Crash Root-Cause Analyzer</h3>
+              </div>
+              <button class="btn btn-secondary" id="btn-crash-refresh" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                <span>Re-Analyze</span>
+              </button>
+            </div>
+
+            <!-- Diagnostics Content Box -->
+            <div id="crash-analysis-box" style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px; padding: 18px; margin-bottom: 18px;">
+              <div style="font-weight: 800; color: var(--ink-muted); font-size: 0.80rem; text-transform: uppercase;">Diagnostic Status</div>
+              <div style="font-size: 1.15rem; font-weight: 900; margin-top: 4px;" id="crash-status-headline">Checking crash reports...</div>
+              <div style="margin-top: 10px; font-size: 0.88rem; font-weight: 600; line-height: 1.5;" id="crash-status-detail"></div>
+            </div>
+
+            <!-- Remediation Advice Box -->
+            <div id="crash-remediation-box" style="display: none; background: #ffffff; border: 2px solid var(--ink-primary); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+              <div style="font-weight: 800; font-size: 0.80rem; color: var(--pal-coral); text-transform: uppercase;">Recommended Remediation:</div>
+              <div style="font-size: 0.88rem; font-weight: 700; margin-top: 4px;" id="crash-remediation-text"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" id="btn-run-auto-fix" style="flex: 1;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span>Run Automated Repair</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-open-crash-folder">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span>Crash Folder</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Live Log Viewer -->
+        <div class="card-panel">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 4px;">GAME LOGS</span>
+              <h3 style="font-size: 1.35rem; font-weight: 900;">latest.log Viewer</h3>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary" id="btn-copy-log" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>Copy</span>
+              </button>
+              <button class="btn btn-secondary" id="btn-open-log-folder" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                <span>Logs Folder</span>
+              </button>
+              <button class="btn btn-mint" id="btn-refresh-log" style="padding: 7px 12px; font-size: 0.82rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                <span>Reload</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="log-console-box" id="log-console-view">Scanning game logs...</div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- VIEW 6: SETTINGS & SYSTEM STUDIO -->
+    <section id="view-settings" class="view-panel">
+      <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px;">
+        
+        <!-- Left: Game & Launcher Settings -->
+        <div class="card-panel">
+          <h2 style="font-size: 1.45rem; font-weight: 900; margin-bottom: 18px;">Launcher & Game Configuration</h2>
+          
+          <!-- Java Runtime -->
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px;">Java Executable Path (javaw.exe):</label>
+            <input type="text" id="setting-java-path" class="tactile-input" style="font-family: var(--font-mono); font-size: 0.84rem;">
+            <span style="font-size: 0.78rem; color: var(--ink-muted); font-weight: 600;">Leave empty or set to automatic. Moon Launcher selects optimal Java (8, 17, 21) dynamically.</span>
+          </div>
+
+          <!-- Memory Slider -->
+          <div style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 0.86rem; font-weight: 800;">Maximum Allocated RAM (JVM Heap):</label>
+              <span class="badge-tag" id="setting-ram-label" style="background: var(--pal-coral);">8 GB</span>
+            </div>
+            <input type="range" id="setting-ram-slider" min="2" max="32" step="1" value="8" style="width: 100%; accent-color: var(--pal-coral);">
+          </div>
+
+          <!-- Window Resolution -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px;">
+            <div>
+              <label style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px;">Game Width (px):</label>
+              <input type="number" id="setting-width" class="tactile-input" value="1280">
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px;">Game Height (px):</label>
+              <input type="number" id="setting-height" class="tactile-input" value="720">
+            </div>
+          </div>
+
+          <!-- Flags & Options -->
+          <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <input type="checkbox" id="setting-fullscreen" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+              <span>Start Game in Fullscreen Mode</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <input type="checkbox" id="setting-discord-rpc" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+              <span>Enable Discord Rich Presence (RPC)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <input type="checkbox" id="setting-jvm-g1gc" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+              <span>High-Performance JVM G1GC Flags Preset</span>
+            </label>
+          </div>
+
+          <!-- Save Button -->
+          <button class="btn btn-primary" id="btn-save-all-settings" style="width: 100%; padding: 13px;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+            <span>Save All Configuration Settings</span>
+          </button>
+        </div>
+
+        <!-- Right: Hardware Specs & Updater Studio -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          
+          <!-- System Specs Card -->
+          <div class="card-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <h3 style="font-size: 1.25rem; font-weight: 900;">Hardware Diagnostics</h3>
+              <span class="badge-tag" style="background: var(--pal-mint);">HARDWARE</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px; padding: 10px 14px;">
+                <div style="font-size: 0.76rem; font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Processor (CPU)</div>
+                <div style="font-weight: 800; font-size: 0.95rem;" id="spec-cpu-name">Scanning...</div>
+              </div>
+
+              <div style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px; padding: 10px 14px;">
+                <div style="font-size: 0.76rem; font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Graphics (GPU)</div>
+                <div style="font-weight: 800; font-size: 0.95rem;" id="spec-gpu-name">Scanning...</div>
+              </div>
+
+              <div style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px; padding: 10px 14px;">
+                <div style="font-size: 0.76rem; font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">System RAM</div>
+                <div style="font-weight: 800; font-size: 0.95rem;" id="spec-ram-summary">Scanning...</div>
+              </div>
+
+              <div style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px; padding: 10px 14px;">
+                <div style="font-size: 0.76rem; font-weight: 800; color: var(--ink-muted); text-transform: uppercase;">Operating System</div>
+                <div style="font-weight: 800; font-size: 0.95rem;" id="spec-os-name">Windows</div>
+              </div>
+            </div>
+
+            <!-- Detected Java Versions Strip -->
+            <div style="margin-top: 14px;">
+              <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 6px;">Detected Local Java Runtimes:</div>
+              <div id="spec-javas-list" style="display: flex; flex-direction: column; gap: 6px;">
+                <!-- Detected Java list -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Launcher Auto-Updater Studio -->
+          <div class="card-panel-mint">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h3 style="font-size: 1.25rem; font-weight: 900;">Moon Launcher Updater</h3>
+              <span class="badge-tag" style="background: #ffffff;" id="updater-local-ver">v2.4.5</span>
+            </div>
+            <p style="font-size: 0.88rem; font-weight: 600; margin-bottom: 14px; line-height: 1.5;">
+              Keep Moon Launcher up to date with the latest engine patches, security fixes, and game modpack optimizers.
+            </p>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary" id="btn-check-updates" style="flex: 1;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                <span>Check Updates</span>
+              </button>
+              <button class="btn btn-primary" id="btn-run-update" style="flex: 1;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                <span>Update Now</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: SKIN & CAPE CUSTOMIZATION STUDIO -->
+  <div class="modal-backdrop" id="modal-skin-customizer">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 4px;">CUSTOM IDENTITY</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Skin & Cape Customizer</h3>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-skin-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <!-- Preview Box & File Status -->
+      <div style="display: flex; gap: 18px; align-items: center; margin-bottom: 16px;">
+        <div style="width: 88px; height: 88px; background: var(--pal-cream); border: 2.5px solid var(--ink-primary); border-radius: 10px; box-shadow: 2.5px 2.5px 0px var(--ink-primary); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+          <img src="https://minotar.net/bust/Steve/128.png" id="modal-skin-preview-img" alt="Skin Preview" style="width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated;">
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 1.1rem; font-weight: 900;" id="modal-skin-name-display">Active Skin</div>
+          <div style="font-size: 0.82rem; color: var(--ink-secondary); font-weight: 700; margin-top: 3px;" id="modal-skin-file-label">Select a .png skin file from your PC or paste link</div>
+          <div style="font-size: 0.74rem; color: var(--ink-muted); font-weight: 600; margin-top: 2px;">Standard Minecraft 64x64 or 64x32 PNG format</div>
+        </div>
+      </div>
+
+      <!-- File Upload Dropzone (Native Browse / Drag & Drop) -->
+      <div class="skin-dropzone" id="skin-upload-dropzone" style="margin-bottom: 16px;">
+        <input type="file" id="skin-file-input" accept="image/png,.png" style="display: none;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        <div style="font-weight: 900; font-size: 0.96rem;">Click to Browse or Drag & Drop Skin (.png)</div>
+        <div style="font-size: 0.78rem; color: var(--ink-muted); font-weight: 600; margin-top: 2px;">Opens file picker directly to choose your skin</div>
+        <button class="btn btn-primary" id="btn-trigger-file-pick" type="button" style="margin-top: 10px; padding: 7px 16px; font-size: 0.84rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span>Browse Skin File...</span>
+        </button>
+      </div>
+
+      <!-- Alternative: URL or Player Name -->
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; font-size: 0.82rem; font-weight: 800; margin-bottom: 4px; color: var(--ink-secondary);">Or Load Texture from Online Account / Direct Skin URL:</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="modal-skin-input" class="tactile-input" placeholder="e.g. Dream, Technoblade, or https://...png" style="font-size: 0.86rem; padding: 8px 12px;">
+          <button class="btn btn-secondary" id="btn-fetch-skin-preview" style="padding: 8px 14px; font-size: 0.82rem;">Preview</button>
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn btn-secondary" id="btn-skin-reset">Reset to Default Skin</button>
+        <button class="btn btn-primary" id="btn-skin-apply">Apply & Broadcast to LAN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD MULTIPLAYER SERVER -->
+  <div class="modal-backdrop" id="modal-add-server">
+    <div class="modal-box">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 4px;">MULTIPLAYER</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Add Favorite Server</h3>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-server-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 800; margin-bottom: 4px;">Server Name:</label>
+          <input type="text" id="modal-server-name" class="tactile-input" placeholder="e.g. My Private SMP">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; font-weight: 800; margin-bottom: 4px;">Server IP Address & Port:</label>
+          <input type="text" id="modal-server-addr" class="tactile-input" placeholder="e.g. play.myserver.net:25565">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn btn-secondary" id="btn-cancel-add-server">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-add-server">Save Server</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INSTALLATION PROGRESS STUDIO & DOWNLOAD HUD -->
+  <div class="modal-backdrop" id="modal-install-progress">
+    <div class="modal-box" style="max-width: 620px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" id="modal-install-type-badge" style="background: var(--pal-mint); margin-bottom: 6px; text-transform: uppercase;">MODPACK INSTALLER</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900; line-height: 1.25;" id="modal-install-title">Installing Package...</h3>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-install-modal" style="padding: 4px 10px; font-size: 1.1rem; display: none;">✕</button>
+      </div>
+
+      <!-- Current Step & File -->
+      <div style="margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+          <span style="font-size: 0.88rem; font-weight: 800; color: var(--ink-primary);" id="modal-install-step">Connecting to Modrinth...</span>
+          <span style="font-size: 0.95rem; font-weight: 900; color: var(--ink-primary);" id="modal-install-percent">0%</span>
+        </div>
+
+        <!-- Tactile Progress Bar -->
+        <div style="height: 18px; background: var(--pal-cream); border: 2.5px solid var(--ink-primary); border-radius: 999px; overflow: hidden; position: relative; box-shadow: 2px 2px 0px var(--ink-primary);">
+          <div id="modal-install-progress-bar" style="height: 100%; width: 0%; background: #10b981; transition: width 0.25s ease; border-radius: 999px;"></div>
+        </div>
+
+        <!-- Download Metrics (Files count & current file name) -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.78rem; color: var(--ink-secondary); font-weight: 700;">
+          <span id="modal-install-count" style="display: flex; align-items: center; gap: 6px;">
+            <svg class="spin" id="modal-install-spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+            <span id="modal-install-count-text">Preparing manifest...</span>
+          </span>
+          <span id="modal-install-current-file" style="max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-muted); font-family: monospace;"></span>
+        </div>
+      </div>
+
+      <!-- Live Log Stream Box -->
+      <div style="background: var(--ink-primary); border-radius: 8px; padding: 10px 14px; font-family: monospace; font-size: 0.76rem; color: #a7f3d0; height: 110px; overflow-y: auto; margin-bottom: 18px; border: 2px solid var(--ink-primary);" id="modal-install-log-box">
+        <div style="color: var(--pal-cream);">[Moon Installer Studio Engine v2.0 Ready]</div>
+      </div>
+
+      <!-- Footer Buttons & Actions -->
+      <div style="display: flex; gap: 10px; justify-content: flex-end;" id="modal-install-actions">
+        <button class="btn btn-secondary" id="btn-minimize-install-modal" style="font-size: 0.85rem; padding: 8px 14px;">Hide (Run in Background)</button>
+        <button class="btn btn-primary" id="btn-finish-install-modal" style="font-size: 0.85rem; padding: 8px 16px; display: none;">Play Now</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL: SHARE MODPACK (P2P ANYCAST TUNNEL) -->
+  <div class="modal-backdrop" id="modal-share-pack">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 6px;">P2P / CLOUD TUNNEL</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Bagi Modpack ke Teman</h3>
+          <p style="font-size: 0.82rem; color: var(--ink-secondary); font-weight: 600;">Bagikan modpack custom langsung dari launcher tanpa upload manual ke website luar.</p>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-share-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <!-- State 1: Choose instance to share & start -->
+      <div id="share-view-setup" style="display: flex; flex-direction: column; gap: 14px;">
+        <div>
+          <label style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px; color: var(--ink-secondary);">
+            Pilih Modpack yang Ingin Dibagikan:
+          </label>
+          <select id="share-select-instance" class="tactile-select">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div style="background: rgba(144, 238, 144, 0.15); border: 2px dashed #90EE90; border-radius: 8px; padding: 14px; font-size: 0.84rem; color: var(--ink-primary); line-height: 1.5;">
+          <strong>💡 Cara Kerja:</strong>
+          <ul style="margin: 6px 0 0 16px; padding: 0;">
+            <li>Launcher mengompres modpack (mods, config, shaderpacks, icon).</li>
+            <li>Membuat tunnel Anycast publik otomatis (bisa diakses publik, bukan cuma LAN).</li>
+            <li>Menghasilkan kode unik seperti <code>MOON-PACK-9821</code> yang bisa langsung dimasukkan temanmu!</li>
+          </ul>
+        </div>
+
+        <button class="btn btn-primary" id="btn-start-sharing" style="padding: 12px; font-size: 0.95rem; justify-content: center; width: 100%;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span id="btn-start-sharing-text">Buat Kode & Mulai Berbagi</span>
+        </button>
+      </div>
+
+      <!-- State 2: Active sharing status & big code -->
+      <div id="share-view-active" style="display: none; flex-direction: column; gap: 14px;">
+        <div style="background: var(--ink-primary); border-radius: 10px; padding: 20px; text-align: center; border: 2px solid var(--ink-primary);">
+          <div style="font-size: 0.78rem; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; color: #a7f3d0; margin-bottom: 6px;">
+            KODE MODPACK AKTIF (BERIKAN KE TEMAN)
+          </div>
+          <div style="font-size: 2.2rem; font-weight: 900; letter-spacing: 0.05em; font-family: monospace; color: #90EE90; user-select: all;" id="share-active-code">
+            MOON-PACK-9821
+          </div>
+          <button class="btn btn-white" id="btn-copy-share-code" style="margin-top: 12px; padding: 8px 18px; font-size: 0.84rem; display: inline-flex;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            <span id="btn-copy-share-code-text">Salin Kode</span>
+          </button>
+        </div>
+
+        <div class="card-panel" style="padding: 14px; font-size: 0.84rem; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--ink-secondary); font-weight: 700;">Modpack:</span>
+            <strong id="share-status-pack-name">-</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--ink-secondary); font-weight: 700;">Loader & Versi:</span>
+            <span id="share-status-pack-meta">-</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--ink-secondary); font-weight: 700;">Ukuran Paket:</span>
+            <span id="share-status-pack-size">-</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--ink-secondary); font-weight: 700;">Status Transfer:</span>
+            <span style="color: #10b981; font-weight: 800;" id="share-status-live">🟢 Siap Mengirim</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button class="btn btn-secondary" id="btn-hide-share-modal" style="padding: 8px 14px; font-size: 0.84rem;">Tutup (Tetap Berjalan di Background)</button>
+          <button class="btn btn-danger" id="btn-stop-sharing" style="padding: 8px 16px; font-size: 0.84rem; background: #ef4444; color: white;">Hentikan Berbagi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: IMPORT MODPACK BY CODE -->
+  <div class="modal-backdrop" id="modal-import-pack">
+    <div class="modal-box" style="max-width: 520px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 6px;">TERIMA MODPACK</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Terima Modpack Teman</h3>
+          <p style="font-size: 0.82rem; color: var(--ink-secondary); font-weight: 600;">Masukkan kode seperti MOON-PACK-9821 untuk mendownload langsung.</p>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-import-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div>
+          <label for="input-import-pack-code" style="display: block; font-size: 0.86rem; font-weight: 800; margin-bottom: 6px; color: var(--ink-secondary);">
+            Kode Modpack:
+          </label>
+          <input type="text" id="input-import-pack-code" class="tactile-input" placeholder="e.g. MOON-PACK-9821 atau 9821" style="font-size: 1.15rem; font-family: monospace; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase;">
+        </div>
+
+        <!-- Preview Info Card when searched -->
+        <div id="import-pack-preview" style="display: none; background: rgba(144, 238, 144, 0.15); border: 2px solid #90EE90; border-radius: 8px; padding: 14px; font-size: 0.86rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div style="font-weight: 900; font-size: 1.05rem;" id="import-preview-name">-</div>
+              <div style="color: var(--ink-secondary); font-size: 0.80rem; margin-top: 3px;" id="import-preview-meta">-</div>
+              <div style="color: var(--ink-muted); font-size: 0.76rem; margin-top: 2px;" id="import-preview-host">-</div>
+            </div>
+            <span class="badge-tag" style="background: #90EE90; color: #121212; font-weight: 900;">DITEMUKAN</span>
+          </div>
+        </div>
+
+        <div id="import-pack-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 2px solid #ef4444; border-radius: 8px; padding: 12px; font-size: 0.84rem; color: #b91c1c; font-weight: 700;">
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px;">
+          <button class="btn btn-secondary" id="btn-cancel-import" style="padding: 9px 16px; font-size: 0.86rem;">Batal</button>
+          <button class="btn btn-primary" id="btn-submit-import-pack" style="padding: 9px 20px; font-size: 0.86rem; gap: 7px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            <span id="btn-submit-import-text">Download & Pasang</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="app-toast" class="toast-notice"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

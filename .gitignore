@@ -19,3 +19,11 @@ shaderpacks/
 mods/
 config/
 versions/
+
+build/
+dist/
+*.spec
+.moon_cache/
+.backup/
+*.tmp
+*.user_backup

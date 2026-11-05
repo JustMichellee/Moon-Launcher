@@ -1,4 +1,6 @@
+﻿ACTIVE_GAME_PROC = None
 import network_hub
+import updater
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -20,6 +22,93 @@ import urllib.request
 import urllib.parse
 import zipfile
 import shutil
+import socket
+
+_orig_getaddrinfo = socket.getaddrinfo
+_dns_cache = {}
+
+def resolve_a_record_tcp(domain, dns_servers=("8.8.8.8", "8.8.4.4")):
+    if domain in _dns_cache:
+        return _dns_cache[domain]
+    parts = domain.split('.')
+    if len(parts) == 4 and all(p.isdigit() for p in parts):
+        return [domain]
+    header = bytes([0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    qname = b""
+    for part in domain.split('.'):
+        if not part: continue
+        qname += bytes([len(part)]) + part.encode('latin1')
+    qname += b"\x00"
+    payload = header + qname + bytes([0x00, 0x01, 0x00, 0x01])
+    length_prefix = struct.pack("!H", len(payload))
+    for s in dns_servers:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2.5)
+        try:
+            sock.connect((s, 53))
+            sock.sendall(length_prefix + payload)
+            len_data = sock.recv(2)
+            if len(len_data) < 2:
+                continue
+            resp_len = struct.unpack("!H", len_data)[0]
+            resp = b""
+            while len(resp) < resp_len:
+                chunk = sock.recv(resp_len - len(resp))
+                if not chunk: break
+                resp += chunk
+            ancount = struct.unpack("!H", resp[6:8])[0]
+            if ancount == 0: continue
+            idx = 12
+            while resp[idx] != 0:
+                if resp[idx] & 0xc0 == 0xc0:
+                    idx += 2
+                    break
+                idx += resp[idx] + 1
+            else:
+                idx += 1
+            idx += 4
+            ips = []
+            for _ in range(ancount):
+                if idx >= len(resp): break
+                if resp[idx] & 0xc0 == 0xc0: idx += 2
+                else:
+                    while resp[idx] != 0: idx += resp[idx] + 1
+                    idx += 1
+                rtype, rclass, ttl, rdlength = struct.unpack("!HHIH", resp[idx:idx+10])
+                idx += 10
+                rdata = resp[idx:idx+rdlength]
+                idx += rdlength
+                if rtype == 1 and rdlength == 4:
+                    ips.append(socket.inet_ntoa(rdata))
+            if ips:
+                _dns_cache[domain] = ips
+                return ips
+        except Exception:
+            continue
+        finally:
+            sock.close()
+    return []
+
+def safe_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    try:
+        return _orig_getaddrinfo(host, port, family, type, proto, flags)
+    except Exception:
+        pass
+    ips = resolve_a_record_tcp(str(host))
+    if ips:
+        results = []
+        for ip in ips:
+            try:
+                res = _orig_getaddrinfo(ip, port, socket.AF_INET, type, proto, flags)
+                results.extend(res)
+            except Exception:
+                pass
+        if results:
+            return results
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+
+socket.getaddrinfo = safe_getaddrinfo
+
 
 if sys.platform == 'win32':
     import msvcrt
@@ -30,7 +119,7 @@ if sys.platform == 'win32':
 
 # Window Title
 if sys.platform == 'win32':
-    os.system('title Moon Launcher')
+    (os.system('title Moon Launcher') if (sys.platform == 'win32' and sys.stdout and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) else 0)
 
 # ANSI Color Palette (Claude Code / Moon Studio Theme)
 C_BORDER  = '\033[38;2;60;70;90m'
@@ -49,18 +138,14 @@ CLR_REV   = '\033[7m'
 def detect_best_java():
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(cur_dir, "runtime", "bin", "javaw.exe"),
-        os.path.join(cur_dir, "runtime", "jre-21.0.11-windows-x64", "bin", "javaw.exe"),
-        os.path.join(cur_dir, "runtime", "jre1.8.0_281", "bin", "javaw.exe"),
         os.path.expandvars(r"%APPDATA%\.minecraft\runtime\java-runtime-gamma\windows\java-runtime-gamma\bin\javaw.exe"),
-        os.path.expandvars(r"%APPDATA%\.minecraft\runtime\jre-21.0.11-windows-x64\bin\javaw.exe"),
         os.path.expandvars(r"%APPDATA%\.minecraft\runtime\java-runtime-delta\windows\java-runtime-delta\bin\javaw.exe"),
-        os.path.expandvars(r"%APPDATA%\.minecraft\runtime\jre1.8.0_281\bin\javaw.exe"),
-        os.path.expandvars(r"%APPDATA%\.minecraft\runtime\java-runtime-epsilon\windows\java-runtime-epsilon\bin\javaw.exe"),
+        os.path.join(cur_dir, "runtime", "bin", "javaw.exe"),
         os.path.expandvars(r"%APPDATA%\.minecraft\runtime\jre-legacy\windows\jre-legacy\bin\javaw.exe"),
-        r"C:\ProgramData\Oracle\Java\javapath\javaw.exe",
         r"C:\Program Files\Java\jdk-21\bin\javaw.exe",
         r"C:\Program Files\Java\jdk-17\bin\javaw.exe",
+        os.path.join(cur_dir, "runtime", "jre-21.0.11-windows-x64", "bin", "javaw.exe"),
+        os.path.join(cur_dir, "runtime", "jre1.8.0_281", "bin", "javaw.exe"),
     ]
     for c in candidates:
         if os.path.exists(c):
@@ -480,14 +565,14 @@ class MoonDiscordRPC:
         h = host.strip()
         p = str(port).strip()
         if h.startswith('26.'):
-            return f"Mabar (Radmin): {h}:{p}"
+            return f"Multiplayer (Radmin): {h}:{p}"
         elif h.startswith('25.'):
-            return f"Mabar (Hamachi): {h}:{p}"
+            return f"Multiplayer (Hamachi): {h}:{p}"
         elif h.startswith(('192.168.', '10.', '172.')):
-            return f"Mabar (LAN): {h}:{p}"
+            return f"Multiplayer (LAN): {h}:{p}"
         elif p == '25565':
-            return f"Mabar: {h}"
-        return f"Mabar: {h}:{p}"
+            return f"Multiplayer: {h}"
+        return f"Multiplayer: {h}:{p}"
 
 
     def set_menu(self, version_dir, cfg):
@@ -1018,10 +1103,24 @@ def detect_version_and_loader(target_dir, declared_loader=None, declared_mc_vers
                     v_data = json.load(f)
                 if 'mainClass' in v_data or 'minecraftArguments' in v_data or 'arguments' in v_data:
                     if not mc_ver:
-                        m_id = v_data.get('id', '')
-                        m_match = re.search(r'\b(1\.\d+(?:\.\d+)?)\b', m_id or os.path.basename(jp))
-                        if m_match:
-                            mc_ver = m_match.group(1)
+                        m_id = str(v_data.get('id', ''))
+                        src_str = m_id or os.path.basename(jp)
+                        m_nf = re.search(r'neoforge-(\d+)\.(\d+)(?:\.(\d+))?', src_str, re.IGNORECASE)
+                        if m_nf:
+                            maj = int(m_nf.group(1))
+                            min_ = m_nf.group(2)
+                            if maj >= 26:
+                                mc_ver = f"{maj}.{min_}"
+                            elif maj > 1:
+                                mc_ver = f"1.{maj}.{min_}"
+                        if not mc_ver:
+                            m_match = re.search(r'(?<![\.\d])(1\.\d+(?:\.\d+)?)\b', src_str)
+                            if m_match:
+                                mc_ver = m_match.group(1)
+                        if not mc_ver:
+                            m_match2 = re.search(r'(?<![\.\d])(\d{2,}\.\d+(?:\.\d+)?)\b', src_str)
+                            if m_match2:
+                                mc_ver = m_match2.group(1)
                     if not loader:
                         mc_class = v_data.get('mainClass', '')
                         if 'knot.KnotClient' in mc_class:
@@ -1030,11 +1129,17 @@ def detect_version_and_loader(target_dir, declared_loader=None, declared_mc_vers
                             loader = 'Forge'
                         elif 'bootstraplauncher' in mc_class:
                             loader = 'Forge'
-                        elif 'neoforged' in mc_class:
+                        elif 'neoforged' in mc_class or 'neoforge' in str(jp).lower() or 'neoforge' in str(v_data.get('id', '')).lower():
                             loader = 'NeoForge'
                         elif mc_class == 'net.minecraft.client.main.Main':
                             has_forge = any('minecraftforge' in str(lib.get('name', '')) for lib in v_data.get('libraries', []))
-                            loader = 'Forge' if has_forge else 'Vanilla'
+                            has_neoforge = any('neoforge' in str(lib.get('name', '')) for lib in v_data.get('libraries', []))
+                            if has_neoforge or 'neoforge' in v_name.lower():
+                                loader = 'NeoForge'
+                            elif has_forge:
+                                loader = 'Forge'
+                            else:
+                                loader = 'Vanilla'
                     break
             except Exception:
                 pass
@@ -1059,15 +1164,35 @@ def detect_version_and_loader(target_dir, declared_loader=None, declared_mc_vers
                 mc_ver = dominant_ver
 
     if not mc_ver:
-        match = re.search(r'\b(1\.\d+(?:\.\d+)?)\b', v_name)
+        m_nf = re.search(r'neoforge-(\d+)\.(\d+)(?:\.(\d+))?', v_name, re.IGNORECASE)
+        if m_nf:
+            maj = int(m_nf.group(1))
+            min_ = m_nf.group(2)
+            if maj >= 26:
+                mc_ver = f"{maj}.{min_}"
+            elif maj > 1:
+                mc_ver = f"1.{maj}.{min_}"
+    if not mc_ver:
+        match = re.search(r'(?<![\.\d])(1\.\d+(?:\.\d+)?)\b', v_name)
         if match:
             mc_ver = match.group(1)
-        else:
-            mc_ver = "1.20.1"
+    if not mc_ver:
+        match2 = re.search(r'(?<![\.\d])(\d{2,}\.\d+(?:\.\d+)?)\b', v_name)
+        if match2:
+            mc_ver = match2.group(1)
+    if not mc_ver:
+        mc_ver = "1.20.1"
 
-    if not loader or (loader == 'Vanilla' and mod_files):
-        if not mod_files:
-            loader = 'Vanilla'
+    if not loader or (loader == 'Vanilla' and (mod_files or 'neoforge' in v_name.lower() or 'forge' in v_name.lower())):
+        if 'neoforge' in v_name.lower():
+            loader = 'NeoForge'
+        elif not mod_files:
+            if 'forge' in v_name.lower():
+                loader = 'Forge'
+            elif 'fabric' in v_name.lower():
+                loader = 'Fabric'
+            else:
+                loader = 'Vanilla'
         elif any('connector' in m or 'sinytra' in m for m in mod_files):
             loader = 'Forge'
         else:
@@ -1299,6 +1424,56 @@ def build_launch_args_from_json(target_dir, v_data, username=None, jvm_max_gb=4,
     lines.extend(['--width', '1280', '--height', '720'])
     return lines
 
+def ensure_ftb_dependencies(target_dir):
+    """
+    Auto-detects if a modpack relies on FTB Quests / FTB Library
+    (which are excluded from Modrinth mrpacks) and downloads them from CurseForge API.
+    """
+    mods_dir = os.path.join(target_dir, 'mods')
+    if not os.path.exists(mods_dir):
+        return
+
+    config_ftb = os.path.join(target_dir, 'config', 'ftbquests')
+    has_ftb_ref = os.path.exists(config_ftb)
+
+    if not has_ftb_ref:
+        for f in os.listdir(mods_dir):
+            if 'quest' in f.lower() or 'ftb' in f.lower():
+                has_ftb_ref = True
+                break
+
+    if not has_ftb_ref:
+        return
+
+    existing_mods = [f.lower() for f in os.listdir(mods_dir)]
+    need_quests = not any('ftb-quests' in m or 'ftbquests' in m for m in existing_mods)
+    need_lib = not any('ftb-library' in m or 'ftblibrary' in m for m in existing_mods)
+    need_teams = not any('ftb-teams' in m or 'ftbteams' in m for m in existing_mods)
+
+    if not (need_quests or need_lib or need_teams):
+        return
+
+    print(f"\n{C_CYAN}[Moon Launcher] Detected FTB Quests progression in modpack. Provisioning missing core libraries...{CLR_RESET}")
+    curse_items = []
+    if need_quests:
+        curse_items.append((438496, 8078537, 'ftb-quests-fabric-2001.4.22.jar'))
+    if need_lib:
+        curse_items.append((438495, 8226926, 'ftb-library-fabric-2001.2.13.jar'))
+    if need_teams:
+        curse_items.append((438497, 7499808, 'ftb-teams-fabric-2001.3.2.jar'))
+
+    for mid, fid, fname in curse_items:
+        dest = os.path.join(mods_dir, fname)
+        if not os.path.exists(dest):
+            try:
+                url = f"https://www.curseforge.com/api/v1/mods/{mid}/files/{fid}/download"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=15) as r, open(dest, 'wb') as f_out:
+                    f_out.write(r.read())
+                print(f"  {C_GREEN}+ Downloaded FTB component:{CLR_RESET} {fname}")
+            except Exception as e:
+                print(f"  {C_AMBER}[Warn] Failed to download {fname}: {e}{CLR_RESET}")
+
 def ensure_launch_args(target_dir, template_dir=None, declared_loader=None, mc_version=None):
     """
     Self-healing, universal launcher engine.
@@ -1312,6 +1487,7 @@ def ensure_launch_args(target_dir, template_dir=None, declared_loader=None, mc_v
     args_path = os.path.join(target_dir, 'launch_args.txt')
 
     mc_ver, loader = detect_version_and_loader(target_dir, declared_loader, mc_version)
+    ensure_ftb_dependencies(target_dir)
 
     # 1. Self-heal natives for exact MC version
     ensure_natives_for_version(target_dir, mc_ver)
@@ -1357,7 +1533,7 @@ def ensure_launch_args(target_dir, template_dir=None, declared_loader=None, mc_v
                 needs_regen = True
             elif loader == 'Forge' and ('KnotClient' in content or (minor_num >= 13 and '--launchTarget' not in content)):
                 needs_regen = True
-            elif loader == 'Fabric' and ('bootstraplauncher' in content or 'KnotClient' not in content):
+            elif loader == 'Fabric' and ('bootstraplauncher' in content or 'KnotClient' not in content or 'sponge-mixin/0.15.2' in content or 'asm/9.7.1' in content):
                 needs_regen = True
             elif minor_num <= 12 and 'bootstraplauncher' in content:
                 needs_regen = True
@@ -1435,28 +1611,126 @@ def ensure_launch_args(target_dir, template_dir=None, declared_loader=None, mc_v
                         if os.path.exists(full):
                             jars.append(full.replace(os.sep, '/'))
 
-            for f_ver in ('0.18.4', '0.19.2', '0.16.10', '0.15.11'):
-                fab_loader = os.path.join(lib_root, 'net', 'fabricmc', 'fabric-loader', f_ver, f'fabric-loader-{f_ver}.jar')
-                if os.path.exists(fab_loader):
-                    jars.append(fab_loader.replace(os.sep, '/'))
-                    break
+            # Dynamic Fabric Loader discovery with semver sorting
+            req_loader_ver = None
+            cfg_p = os.path.join(target_dir, 'launcher_config.json')
+            if os.path.exists(cfg_p):
+                try:
+                    with open(cfg_p, 'r', encoding='utf-8') as f_cfg:
+                        req_loader_ver = json.load(f_cfg).get('loader_version')
+                except Exception:
+                    pass
 
-            inter = os.path.join(lib_root, 'net', 'fabricmc', 'intermediary', mc_ver, f'intermediary-{mc_ver}.jar')
-            if not os.path.exists(inter):
-                inter = os.path.join(lib_root, 'net', 'fabricmc', 'intermediary', '1.20.1', 'intermediary-1.20.1.jar')
-            if os.path.exists(inter):
-                jars.append(inter.replace(os.sep, '/'))
+            fab_loader_dir = os.path.join(lib_root, 'net', 'fabricmc', 'fabric-loader')
+            installed_fab_vers = []
+            if os.path.exists(fab_loader_dir):
+                for d in os.listdir(fab_loader_dir):
+                    if os.path.isfile(os.path.join(fab_loader_dir, d, f"fabric-loader-{d}.jar")):
+                        installed_fab_vers.append(d)
 
-            for s_dir in ('0.15.2+mixin.0.8.7', '0.16.5+mixin.0.8.7', '0.17.0+mixin.0.8.7'):
-                sp = os.path.join(lib_root, 'net', 'fabricmc', 'sponge-mixin', s_dir, f'sponge-mixin-{s_dir}.jar')
-                if os.path.exists(sp):
-                    jars.append(sp.replace(os.sep, '/'))
-                    break
+            def _sort_semver(v):
+                parts = re.findall(r'\d+', v)
+                return [int(p) for p in parts] if parts else [0]
 
-            for name, sub in [('asm-9.7.1.jar', 'asm'), ('asm-analysis-9.7.1.jar', 'asm-analysis'), ('asm-commons-9.7.1.jar', 'asm-commons'), ('asm-tree-9.7.1.jar', 'asm-tree'), ('asm-util-9.7.1.jar', 'asm-util')]:
-                p = os.path.join(lib_root, 'org', 'ow2', 'asm', sub, '9.7.1', name)
-                if os.path.exists(p):
-                    jars.append(p.replace(os.sep, '/'))
+            installed_fab_vers.sort(key=_sort_semver, reverse=True)
+
+            chosen_fab_jar = None
+            if req_loader_ver:
+                exact_p = os.path.join(fab_loader_dir, req_loader_ver, f"fabric-loader-{req_loader_ver}.jar")
+                if os.path.exists(exact_p):
+                    chosen_fab_jar = exact_p
+                else:
+                    # Auto-download requested fabric loader
+                    try:
+                        dl_u = f"https://maven.fabricmc.net/net/fabricmc/fabric-loader/{req_loader_ver}/fabric-loader-{req_loader_ver}.jar"
+                        os.makedirs(os.path.dirname(exact_p), exist_ok=True)
+                        req_fl = urllib.request.Request(dl_u, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req_fl, timeout=10) as r_fl, open(exact_p, 'wb') as f_fl:
+                            f_fl.write(r_fl.read())
+                        chosen_fab_jar = exact_p
+                    except Exception:
+                        pass
+
+            if not chosen_fab_jar:
+                if installed_fab_vers:
+                    chosen_fab_jar = os.path.join(fab_loader_dir, installed_fab_vers[0], f"fabric-loader-{installed_fab_vers[0]}.jar")
+                else:
+                    for f_ver in ('0.19.3', '0.20.1', '0.19.2', '0.18.4', '0.16.10'):
+                        fab_loader = os.path.join(lib_root, 'net', 'fabricmc', 'fabric-loader', f_ver, f'fabric-loader-{f_ver}.jar')
+                        if os.path.exists(fab_loader):
+                            chosen_fab_jar = fab_loader
+                            break
+
+            if chosen_fab_jar and chosen_fab_jar.replace(os.sep, '/') not in jars:
+                jars.append(chosen_fab_jar.replace(os.sep, '/'))
+
+            # Extract chosen loader version string (e.g. "0.19.3")
+            chosen_loader_ver = None
+            if chosen_fab_jar:
+                m_fl = re.search(r'fabric-loader-([\w\.\+-]+)\.jar', os.path.basename(chosen_fab_jar))
+                if m_fl:
+                    chosen_loader_ver = m_fl.group(1)
+            if not chosen_loader_ver:
+                chosen_loader_ver = req_loader_ver or "0.19.3"
+
+            fabric_meta_resolved = False
+            if chosen_loader_ver:
+                try:
+                    meta_u = f"https://meta.fabricmc.net/v2/versions/loader/{mc_ver}/{chosen_loader_ver}/profile/json"
+                    req_meta = urllib.request.Request(meta_u, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req_meta, timeout=5) as r_meta:
+                        meta_data = json.loads(r_meta.read().decode('utf-8'))
+                    for lib in meta_data.get('libraries', []):
+                        parts = lib.get('name', '').split(':')
+                        if len(parts) >= 3:
+                            grp, art, ver = parts[0], parts[1], parts[2]
+                            rel_parts = grp.split('.') + [art, ver, f"{art}-{ver}.jar"]
+                            full_p = os.path.join(lib_root, *rel_parts)
+                            if not os.path.exists(full_p):
+                                base_u = (lib.get('url') or 'https://maven.fabricmc.net/').rstrip('/')
+                                dl_u = f"{base_u}/{'/'.join(rel_parts)}"
+                                os.makedirs(os.path.dirname(full_p), exist_ok=True)
+                                req_l = urllib.request.Request(dl_u, headers={'User-Agent': 'Mozilla/5.0'})
+                                with urllib.request.urlopen(req_l, timeout=8) as r_l, open(full_p, 'wb') as f_l:
+                                    f_l.write(r_l.read())
+                            norm_p = full_p.replace(os.sep, '/')
+                            if os.path.exists(full_p) and norm_p not in jars:
+                                jars.append(norm_p)
+                    fabric_meta_resolved = True
+                except Exception:
+                    pass
+
+            if not fabric_meta_resolved:
+                inter = os.path.join(lib_root, 'net', 'fabricmc', 'intermediary', mc_ver, f'intermediary-{mc_ver}.jar')
+                if not os.path.exists(inter):
+                    inter = os.path.join(lib_root, 'net', 'fabricmc', 'intermediary', '1.20.1', 'intermediary-1.20.1.jar')
+                if os.path.exists(inter) and inter.replace(os.sep, '/') not in jars:
+                    jars.append(inter.replace(os.sep, '/'))
+
+                # Fallback sponge-mixin: pick highest installed version
+                sp_root = os.path.join(lib_root, 'net', 'fabricmc', 'sponge-mixin')
+                sp_candidates = []
+                if os.path.exists(sp_root):
+                    for d in os.listdir(sp_root):
+                        sp_file = os.path.join(sp_root, d, f"sponge-mixin-{d}.jar")
+                        if os.path.isfile(sp_file):
+                            sp_candidates.append((d, sp_file))
+                sp_candidates.sort(key=lambda x: _sort_semver(x[0]), reverse=True)
+                if sp_candidates:
+                    jars.append(sp_candidates[0][1].replace(os.sep, '/'))
+
+                # Fallback ASM: pick highest installed version per module
+                for sub in ('asm', 'asm-analysis', 'asm-commons', 'asm-tree', 'asm-util'):
+                    asm_sub_dir = os.path.join(lib_root, 'org', 'ow2', 'asm', sub)
+                    asm_candidates = []
+                    if os.path.exists(asm_sub_dir):
+                        for d in os.listdir(asm_sub_dir):
+                            asm_file = os.path.join(asm_sub_dir, d, f"{sub}-{d}.jar")
+                            if os.path.isfile(asm_file):
+                                asm_candidates.append((d, asm_file))
+                    asm_candidates.sort(key=lambda x: _sort_semver(x[0]), reverse=True)
+                    if asm_candidates:
+                        jars.append(asm_candidates[0][1].replace(os.sep, '/'))
 
             if os.path.exists(target_jar):
                 jars.append(target_jar.replace(os.sep, '/'))
@@ -1590,19 +1864,24 @@ def apply_skin_setting(version_dir, cfg, skin_val):
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     main_skins_dir = os.path.join(cur_dir, "skins")
     os.makedirs(main_skins_dir, exist_ok=True)
+    active_skin_path = os.path.join(main_skins_dir, "active_skin.png")
     saved_skin_path = os.path.join(main_skins_dir, f"{username}.png")
 
     def distribute_skin(source_data_or_path, is_data=False):
         try:
             if is_data:
+                with open(active_skin_path, "wb") as f_act:
+                    f_act.write(source_data_or_path)
                 with open(saved_skin_path, "wb") as f_out:
                     f_out.write(source_data_or_path)
             else:
                 import shutil
+                if os.path.abspath(source_data_or_path) != os.path.abspath(active_skin_path):
+                    shutil.copyfile(source_data_or_path, active_skin_path)
                 if os.path.abspath(source_data_or_path) != os.path.abspath(saved_skin_path):
                     shutil.copyfile(source_data_or_path, saved_skin_path)
         except Exception as e:
-            print(f"{C_AMBER}[Moon Launcher] Warning: Could not save to {saved_skin_path}: {e}{CLR_RESET}")
+            print(f"{C_AMBER}[Moon Launcher] Warning: Could not save skin: {e}{CLR_RESET}")
 
         csl_targets = []
         if version_dir:
@@ -1703,21 +1982,41 @@ def ensure_custom_skin_loader(version_dir, cfg=None):
         return
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
-    csl_template_jar = os.path.join(cur_dir, "templates", "CustomSkinLoader_Universal-15.0.1.jar")
-    if not os.path.exists(csl_template_jar):
-        csl_template_jar = os.path.join(cur_dir, "libraries", "customskinloader", "CustomSkinLoader_Universal-15.0.1.jar")
+    csl_template_universal = os.path.join(cur_dir, "templates", "CustomSkinLoader_Universal-15.1.jar")
+    csl_template_forge = os.path.join(cur_dir, "templates", "CustomSkinLoader_ForgeV2-14.28.jar")
+    if not os.path.exists(csl_template_universal):
+        csl_template_universal = os.path.join(cur_dir, "libraries", "customskinloader", "CustomSkinLoader_Universal-15.0.1.jar")
 
     mods_dir = os.path.join(version_dir, "mods")
     mc_ver, loader = detect_version_and_loader(version_dir)
     if loader != "Vanilla" or os.path.exists(mods_dir):
         os.makedirs(mods_dir, exist_ok=True)
-        # 1. Install CustomSkinLoader mod jar
-        target_jar = os.path.join(mods_dir, "CustomSkinLoader_Universal-15.0.1.jar")
-        if os.path.exists(csl_template_jar) and not os.path.exists(target_jar):
-            try:
-                shutil.copyfile(csl_template_jar, target_jar)
-            except Exception:
-                pass
+        # 1. Install CustomSkinLoader mod jar (prefer ForgeV2 on Forge to prevent JVM bootstrap crash)
+        try:
+            existing_csl = [f for f in os.listdir(mods_dir) if f.lower().startswith('customskinloader') and f.lower().endswith('.jar')]
+        except Exception:
+            existing_csl = []
+
+        if not existing_csl:
+            if loader == "Forge" and os.path.exists(csl_template_forge):
+                target_jar = os.path.join(mods_dir, "CustomSkinLoader_ForgeV2-14.28.jar")
+                tpl_src = csl_template_forge
+            else:
+                target_jar = os.path.join(mods_dir, "CustomSkinLoader_Universal-15.1.jar")
+                tpl_src = csl_template_universal
+
+            if os.path.exists(tpl_src):
+                try:
+                    shutil.copyfile(tpl_src, target_jar)
+                except Exception:
+                    pass
+        elif len(existing_csl) > 1 and any('forgev2' in f.lower() for f in existing_csl):
+            for f in existing_csl:
+                if 'universal' in f.lower():
+                    try:
+                        os.remove(os.path.join(mods_dir, f))
+                    except Exception:
+                        pass
 
         # 2. Disable obsolete or conflicting TLauncher skin mods
         try:
@@ -1906,16 +2205,20 @@ def set_global_username(new_user, active_version_dir=None):
                 except Exception:
                     pass
 
-    # 4. Replicate custom skins for clean_user if old skin file exists
+    # 4. Replicate active skin for clean_user
     skins_dir = os.path.join(cur_dir, "skins")
+    active_skin = os.path.join(skins_dir, "active_skin.png")
     csl_dir = os.path.expandvars(r"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins")
     for s_folder in [skins_dir, csl_dir]:
         if os.path.exists(s_folder):
             try:
                 target_skin = os.path.join(s_folder, f"{clean_user}.png")
-                if not os.path.exists(target_skin):
+                if os.path.exists(active_skin):
+                    import shutil
+                    shutil.copyfile(active_skin, target_skin)
+                elif not os.path.exists(target_skin):
                     for old_cand in os.listdir(s_folder):
-                        if old_cand.endswith('.png'):
+                        if old_cand.endswith('.png') and not old_cand.startswith('.'):
                             import shutil
                             shutil.copyfile(os.path.join(s_folder, old_cand), target_skin)
                             break
@@ -2127,7 +2430,7 @@ def check_java_runtime(java_path):
     if not os.path.exists(java_path):
         return False, 'Not Found'
     try:
-        res = subprocess.run([java_path, '-version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, timeout=5)
+        res = subprocess.run([java_path, '-version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         out = res.stderr or res.stdout
         for line in out.splitlines():
             if 'version' in line.lower():
@@ -2414,7 +2717,7 @@ def adjust_setting_step(cfg, selected_idx, step_dir, avail_versions):
 
 def run_settings_studio(version_dir, cfg):
     if sys.platform == 'win32':
-        os.system('title Moon Launcher - Settings Studio')
+        (os.system('title Moon Launcher - Settings Studio') if (sys.platform == 'win32' and sys.stdout and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) else 0)
 
     temp_cfg = dict(cfg)
     is_modified = False
@@ -2641,7 +2944,7 @@ def run_settings_studio(version_dir, cfg):
                         status_msg = "Warning: File not verified, saved anyway"
 
     if sys.platform == 'win32':
-        os.system('title Moon Launcher')
+        (os.system('title Moon Launcher') if (sys.platform == 'win32' and sys.stdout and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) else 0)
 
     if temp_cfg.get('version_name'):
         chosen_name = temp_cfg['version_name']
@@ -2760,10 +3063,135 @@ def apply_quick_setting(version_dir, cfg, args):
 
     return cfg
 
+
+def handle_pack_share_command(args=None, version_dir=None, cfg=None):
+    """
+    Handles CLI commands for live P2P / Public Anycast modpack sharing:
+    - /pack share [version_name]
+    - /pack stop
+    - /pack receive <MOON-PACK-XXXX>
+    - /pack status
+    """
+    import pack_share
+    box_w = 68
+    args = args or []
+    sub = args[0].lower() if args else "status"
+
+    if sub in ("share", "host", "up", "start"):
+        v_name = args[1] if len(args) > 1 else (os.path.basename(version_dir) if version_dir else None)
+        if not v_name:
+            print(f"\n{C_RED}Error: No version selected to share.{CLR_RESET}\n")
+            return
+
+        print(f"\n{C_CYAN}[Moon Launcher] Packaging & creating Public Anycast Tunnel for '{v_name}'...{CLR_RESET}")
+        
+        def _cli_cb(step="", percent=0, **kw):
+            p_bar = render_apt_progress_bar(percent, 24)
+            sys.stdout.write(f"\r{p_bar} {step[:35]:<35} \x1b[K")
+            sys.stdout.flush()
+
+        res = pack_share.start_pack_share(v_name, progress_cb=_cli_cb)
+        print()
+
+        if res and res.get("success"):
+            pack_code = res["code"]
+            network_hub.copy_to_clipboard(pack_code)
+            
+            lines = [
+                f"{C_GREEN}[1mMODPACK SHARE ONLINE (ANYCAST PUBLIC RELAY)[0m",
+                f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+                f"  {C_WHITE}* Modpack       :{CLR_RESET} {C_CYAN}{res['pack_name']}{CLR_RESET}",
+                f"  {C_WHITE}* Loader & Ver  :{CLR_RESET} {res['loader']} {res['mc_version']} ({res['mod_count']} mods)",
+                f"  {C_WHITE}* Package Size  :{CLR_RESET} {res['size_bytes'] / (1024*1024):.1f} MB",
+                f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+                f"  {C_GREEN}[1m* SHARE CODE    : {pack_code}[0m  {C_MUTED}(COPIED TO CLIPBOARD){CLR_RESET}",
+                f"  {C_MUTED}* Public URL    : {res.get('public_url')}{CLR_RESET}",
+                f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+                f"{C_WHITE}Berikan kode ini ke temanmu:{CLR_RESET} {C_GREEN}{pack_code}{CLR_RESET}",
+                f"{C_MUTED}Temanmu cukup membuka Moon Launcher lalu memasukkan kode di atas.{CLR_RESET}",
+                f"{C_MUTED}Untuk menghentikan sesi berbagi kapan saja, ketik: {C_WHITE}/pack stop{CLR_RESET}"
+            ]
+            print("\n" + render_box(lines, box_w, title="Pack Sharing") + "\n")
+        else:
+            print(f"\n{C_RED}[FAIL] Could not share modpack: {res.get('error') if res else 'Unknown error'}{CLR_RESET}\n")
+
+    elif sub in ("stop", "down", "off", "kill"):
+        pack_share.stop_pack_share()
+        print(f"\n{C_GREEN}[Moon Launcher] Modpack sharing session stopped. Local server closed.{CLR_RESET}\n")
+
+    elif sub in ("receive", "import", "get", "download") or sub.upper().startswith(("MOON-PACK-", "PACK-")) or (len(sub) == 4 and sub.isdigit()):
+        raw_code = args[1] if (sub in ("receive", "import", "get", "download") and len(args) > 1) else sub
+        if not raw_code or raw_code in ("receive", "import", "get", "download"):
+            try:
+                raw_code = input(f"\n  {C_AMBER}Masukkan kode modpack teman (contoh: MOON-PACK-9821): {CLR_RESET}").strip()
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return
+
+        code = pack_share.normalize_pack_code(raw_code)
+        print(f"\n{C_CYAN}[Moon Launcher] Mencari kode {code} di Cloud...{CLR_RESET}")
+        info = pack_share.resolve_pack_code(code)
+
+        if not info.get("found"):
+            print(f"\n{C_RED}[Error] {info.get('error')}{CLR_RESET}\n")
+            return
+
+        lines = [
+            f"{C_WHITE}[1mModpack Ditemukan di Cloud![0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Modpack       :{CLR_RESET} {C_CYAN}{info['pack_name']}{CLR_RESET}",
+            f"  {C_WHITE}* Loader & Ver  :{CLR_RESET} {info['loader']} {info['mc_version']} ({info['mod_count']} mods)",
+            f"  {C_WHITE}* Pengirim      :{CLR_RESET} {info['host_user']}",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"{C_MUTED}Mendownload dan memasang langsung ke Moon Launcher...{CLR_RESET}"
+        ]
+        print("\n" + render_box(lines, box_w, title="Import Modpack") + "\n")
+
+        def _dl_cb(percent=0, step="", **kw):
+            p_bar = render_apt_progress_bar(percent, 24)
+            sys.stdout.write(f"\r{p_bar} {step[:40]:<40} \x1b[K")
+            sys.stdout.flush()
+
+        res = pack_share.download_and_install_shared_pack(code, progress_cb=_dl_cb)
+        print()
+
+        if res and res.get("success"):
+            new_vname = res["version_name"]
+            print(f"\n{C_GREEN}[1m[PASS] Modpack '{new_vname}' berhasil dipasang dan siap dimainkan![0m\n")
+            # Auto switch active version
+            if version_dir and cfg is not None:
+                new_vdir = os.path.join(BASE_VERSIONS_DIR, new_vname)
+                if os.path.exists(new_vdir):
+                    save_config(new_vdir, cfg)
+                    return new_vdir, cfg
+        else:
+            print(f"\n{C_RED}[FAIL] Gagal memasang modpack: {res.get('error') if res else 'Unknown error'}{CLR_RESET}\n")
+
+    else:
+        st = pack_share.get_pack_share_status()
+        if st and st.get("running"):
+            lines = [
+                f"{C_GREEN}[1mACTIVE MODPACK SHARING SESSION[0m",
+                f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+                f"  {C_WHITE}* Modpack       :{CLR_RESET} {C_CYAN}{st['pack_name']}{CLR_RESET}",
+                f"  {C_WHITE}* Share Code    :{CLR_RESET} {C_GREEN}[1m{st['code']}[0m",
+                f"  {C_WHITE}* Public Relay  :{CLR_RESET} {st.get('public_url')}",
+                f"  {C_WHITE}* Data Sent     :{CLR_RESET} {st['bytes_sent'] / (1024*1024):.1f} MB ({st['active_downloads']} active peers)",
+                f"  {C_WHITE}* Uptime        :{CLR_RESET} {st['uptime_seconds']} seconds",
+                f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+                f"{C_MUTED}To stop sharing: /pack stop{CLR_RESET}"
+            ]
+            print("\n" + render_box(lines, box_w, title="Pack Status") + "\n")
+        else:
+            print(f"\n{C_WHITE}Moon Modpack Sharing (/pack):{CLR_RESET}")
+            print(f"  {C_GREEN}/pack share [name]{CLR_RESET} : Bagikan modpack ke teman lewat kode MOON-PACK-XXXX")
+            print(f"  {C_GREEN}/pack receive <code>{CLR_RESET}  : Terima dan pasang modpack dari kode teman")
+            print(f"  {C_GREEN}/pack stop{CLR_RESET}         : Hentikan sesi berbagi\n")
+
 def print_banner(version_dir, cfg):
     os.system('cls' if sys.platform == 'win32' else 'clear')
     if sys.platform == 'win32':
-        os.system('title Moon Launcher')
+        (os.system('title Moon Launcher') if (sys.platform == 'win32' and sys.stdout and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) else 0)
 
     # Ensure CustomSkinLoader and player/friend skins are loaded before boot
     ensure_custom_skin_loader(version_dir, cfg)
@@ -2796,6 +3224,9 @@ def print_banner(version_dir, cfg):
     print(f"  {pad_visible(p5, col1_w)}  {pad_visible(p6, col2_w)}")
     print()
     print(f"  {C_MUTED}Quick Commands:{CLR_RESET} {C_CYAN}/play{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_GREEN}/test{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_AMBER}/fix{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_AMBER}/setting{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_BLUE}/version{CLR_RESET} {C_MUTED}•{CLR_RESET} {C_MUTED}/help{CLR_RESET}")
+    u_notice = updater.get_update_notice()
+    if u_notice:
+        print(f"  {u_notice}")
     print(f"{C_BORDER}{'─' * (box_w + 4)}{CLR_RESET}")
 
 def print_help(topic=None):
@@ -3048,6 +3479,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/test{CLR_RESET} [t]               {C_MUTED}Pre-flight diagnostics & dry-run test{CLR_RESET}",
         f"  {C_CYAN}/fix{CLR_RESET} [f]                {C_MUTED}Auto-repair modpack & runtime issues{CLR_RESET}",
         f"  {C_CYAN}/status{CLR_RESET} [3]             {C_MUTED}System diagnostics, JVM, and mods count{CLR_RESET}",
+        f"  {C_CYAN}/update{CLR_RESET} [u]             {C_MUTED}1-click seamless update from GitHub{CLR_RESET}",
         f"  {C_CYAN}/crash{CLR_RESET}                  {C_MUTED}Inspect latest crash diagnostics & cause{CLR_RESET}",
         "",
         f"{C_WHITE}\033[1mMULTIPLAYER & NETWORKING\033[0m",
@@ -3055,6 +3487,7 @@ def print_help(topic=None):
         f"  {C_CYAN}/host scan{CLR_RESET}              {C_MUTED}Auto-discover open worlds on local network/LAN{CLR_RESET}",
         f"  {C_CYAN}/invite{CLR_RESET}                     {C_MUTED}Generate & copy 1-click multiplayer invite link{CLR_RESET}",
         f"  {C_CYAN}/friend [list]{CLR_RESET}          {C_MUTED}View friends, live status, ping, and notes{CLR_RESET}",
+        f"  {C_CYAN}/friend join <name>{CLR_RESET}     {C_MUTED}Auto-sync friend's custom modpack & join game{CLR_RESET}",
         f"  {C_CYAN}/friend add <link>{CLR_RESET}      {C_MUTED}Add friend instantly by pasting their invite link{CLR_RESET}",
         f"  {C_CYAN}/friend invite{CLR_RESET}          {C_MUTED}Create shareable link (attaches live /host IP){CLR_RESET}",
         f"  {C_CYAN}/friend ping <name>{CLR_RESET}     {C_MUTED}Check real-time server latency and online status{CLR_RESET}",
@@ -3586,6 +4019,29 @@ def launch_game(version_dir, cfg):
         print("\n" + render_box(err_lines, box_w) + "\n")
         return False
 
+    # Guarantee active skin is synchronized with current username in all CustomSkinLoader paths
+    try:
+        cur_d = os.path.dirname(os.path.abspath(__file__))
+        act_s = os.path.join(cur_d, "skins", "active_skin.png")
+        p_user = cfg.get('username', 'Player')
+        if os.path.exists(act_s):
+            sync_targets = [
+                os.path.join(cur_d, "skins", f"{p_user}.png"),
+                os.path.join(version_dir, "skins", f"{p_user}.png"),
+                os.path.join(version_dir, "CustomSkinLoader", "LocalSkin", "skins", f"{p_user}.png"),
+                os.path.join(version_dir, "LocalSkin", "skins", f"{p_user}.png"),
+                os.path.expandvars(rf"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins\{p_user}.png")
+            ]
+            for st in sync_targets:
+                try:
+                    os.makedirs(os.path.dirname(st), exist_ok=True)
+                    import shutil
+                    shutil.copyfile(act_s, st)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     ensure_launch_args(version_dir, declared_loader=loader, mc_version=mc_ver)
     args_path = os.path.join(version_dir, 'launch_args.txt')
     if not os.path.exists(args_path):
@@ -3616,6 +4072,16 @@ def launch_game(version_dir, cfg):
     full_cmd = [j_path] + launch_args
     if cfg.get('fullscreen', False):
         full_cmd.append('--fullscreen')
+    if cfg.get('server'):
+        full_cmd.extend(['--server', str(cfg['server'])])
+        if cfg.get('port'):
+            full_cmd.extend(['--port', str(cfg['port'])])
+        cfg.pop('server', None)
+        cfg.pop('port', None)
+        try:
+            save_config(cfg)
+        except Exception:
+            pass
 
     v_name = cfg.get('version_name', os.path.basename(version_dir))
     v_info = detect_version_info(version_dir, v_name)
@@ -3646,7 +4112,9 @@ def launch_game(version_dir, cfg):
             f"{C_MUTED}You can keep this CLI window open or type /exit.{CLR_RESET}"
         ]
         print("\n" + render_box(launch_lines, box_w) + "\n")
-        return True
+        global ACTIVE_GAME_PROC
+        ACTIVE_GAME_PROC = proc
+        return proc
     except Exception as e:
         err_lines = [
             f"{C_RED}X Failed to launch game: {e}{CLR_RESET}"
@@ -3720,7 +4188,7 @@ def run_preflight_test(version_dir, cfg, dry_run_seconds=7):
 
     if j_exists:
         try:
-            res = subprocess.run([current_java, '-version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, timeout=5)
+            res = subprocess.run([current_java, '-version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
             out = res.stderr or res.stdout
             match = re.search(r'version\s+"(\d+)(?:\.(\d+))?', out, re.IGNORECASE)
             if match:
@@ -4377,6 +4845,11 @@ def switch_version(curr_dir, cfg, target_name=None):
 
     save_config(new_dir, new_cfg)
     set_active_version(chosen_name)
+    try:
+        import network_hub
+        network_hub.update_active_version(new_dir, chosen_name)
+    except Exception:
+        pass
     ensure_launch_args(new_dir, declared_loader=new_cfg.get('loader'), mc_version=new_cfg.get('mc_version'))
     update_launch_args(new_dir, new_cfg)
 
@@ -4394,7 +4867,7 @@ def render_apt_progress_bar(pct, width=32):
     empty = width - filled
     return f"Progress: [{pct:3d}%] [{('#' * filled)}{('.' * empty)}]"
 
-def download_file_stream(url, dest_path, title=None, get_idx=1):
+def download_file_stream(url, dest_path, title=None, get_idx=1, progress_cb=None):
     os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
     req = urllib.request.Request(url, headers={'User-Agent': 'Moon-Launcher/2.0 (Ubuntu-APT-Engine)'})
     disp_name = title or os.path.basename(dest_path)
@@ -4433,9 +4906,22 @@ def download_file_stream(url, dest_path, title=None, get_idx=1):
                             mb_tot = total_bytes / (1024 * 1024)
                             sys.stdout.write(f"\r{bar} {mb_cur:.1f}/{mb_tot:.1f} MB ({speed_mb:.1f} MB/s)   \x1b[K")
                         else:
+                            pct = 50
                             mb_cur = dl_bytes / (1024 * 1024)
+                            mb_tot = mb_cur
                             sys.stdout.write(f"\rProgress: [---%] [##############..........] {mb_cur:.1f} MB ({speed_mb:.1f} MB/s)   \x1b[K")
                         sys.stdout.flush()
+
+                        if progress_cb:
+                            progress_cb(
+                                step=f"Downloading {disp_name} ({mb_cur:.1f}/{mb_tot:.1f} MB)",
+                                current_file=disp_name,
+                                current_bytes=dl_bytes,
+                                total_bytes=total_bytes,
+                                percent=pct,
+                                speed_str=f"{speed_mb:.1f} MB/s",
+                                log=f"Get:{get_idx} {disp_name} [{mb_tot:.1f} MB] ({speed_mb:.1f} MB/s)"
+                            )
 
             # Archive integrity verification for jars and zip archives
             lower_dest = dest_path.lower()
@@ -4844,7 +5330,7 @@ def install_mod_loader(loader_type=None, mc_version=None):
 
                 j_bin = get_best_java_for_version(mc_version)
                 print(f"Executing Forge installer via {os.path.basename(os.path.dirname(os.path.dirname(j_bin)))}...")
-                subprocess.run([j_bin, "-jar", temp_inst, "--installClient", mc_root], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+                subprocess.run([j_bin, "-jar", temp_inst, "--installClient", mc_root], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
                 if os.path.exists(temp_inst):
                     try: os.remove(temp_inst)
                     except Exception: pass
@@ -4895,7 +5381,7 @@ def install_mod_loader(loader_type=None, mc_version=None):
                     download_file_stream(inst_url, temp_inst, f"neoforge-{neo_v}-installer.jar", get_idx=2)
                     j_bin = get_best_java_for_version(mc_version)
                     print(f"Executing NeoForge installer...")
-                    subprocess.run([j_bin, "-jar", temp_inst, "--installClient", mc_root], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+                    subprocess.run([j_bin, "-jar", temp_inst, "--installClient", mc_root], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
                     if os.path.exists(temp_inst):
                         try: os.remove(temp_inst)
                         except Exception: pass
@@ -4957,7 +5443,7 @@ def install_mod_loader(loader_type=None, mc_version=None):
 
     return target_dir
 
-def install_from_mrpack(mrpack_file, custom_name=None, icon_url=None):
+def install_from_mrpack(mrpack_file, custom_name=None, icon_url=None, progress_cb=None):
     import zipfile
     print(f"\n{C_WHITE}Reading package lists...{CLR_RESET} Done")
     time.sleep(0.12)
@@ -5001,18 +5487,45 @@ def install_from_mrpack(mrpack_file, custom_name=None, icon_url=None):
             print(f"Do you want to continue? [Y/n] y\n")
 
             succ_count = 0
-            for idx, item in enumerate(files, 1):
+            if progress_cb:
+                progress_cb(step=f"Downloading {len(files)} packages ({total_mb:.1f} MB)...", total_files=len(files), current_index=0, percent=20, log=f"Found {len(files)} dependency packages ({total_mb:.1f} MB)")
+
+            import concurrent.futures
+            dl_lock = threading.Lock()
+
+            def _worker_dl(item_tuple):
+                nonlocal succ_count
+                idx, item = item_tuple
                 downloads = item.get('downloads', [])
                 if not downloads:
-                    continue
+                    return False
                 file_url = downloads[0]
                 rel_path = item.get('path', '')
                 dest_file = os.path.join(target_dir, rel_path.replace('/', os.sep))
                 os.makedirs(os.path.dirname(dest_file), exist_ok=True)
-
                 fname = os.path.basename(rel_path)
-                if download_file_stream(file_url, dest_file, fname, get_idx=idx):
-                    succ_count += 1
+                ok = download_file_stream(file_url, dest_file, fname, get_idx=idx)
+                with dl_lock:
+                    if ok:
+                        succ_count += 1
+                    pct = 20 + int((succ_count / max(1, len(files))) * 68)
+                    if progress_cb:
+                        progress_cb(
+                            step=f"Downloading packages ({succ_count}/{len(files)})",
+                            current_file=fname,
+                            current_index=succ_count,
+                            total_files=len(files),
+                            percent=pct,
+                            log=f"Get:{succ_count} {fname}"
+                        )
+                return ok
+
+            items_to_dl = list(enumerate(files, 1))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                list(executor.map(_worker_dl, items_to_dl))
+
+            if progress_cb:
+                progress_cb(step="Extracting configs and overrides...", percent=90, log="Unpacking modpack overrides...")
 
             for item in z.namelist():
                 if item.startswith('overrides/'):
@@ -5053,6 +5566,8 @@ def install_from_mrpack(mrpack_file, custom_name=None, icon_url=None):
                     pass
 
             cfg_path = os.path.join(target_dir, 'launcher_config.json')
+            loader_ver_val = deps.get('fabric-loader') or deps.get('forge') or deps.get('neoforge') or ""
+            best_java = get_best_java_for_version(mc_ver, DEFAULT_JAVA)
             v_cfg = {
                 "ram_max_gb": 8,
                 "ram_min_gb": 2,
@@ -5061,10 +5576,11 @@ def install_from_mrpack(mrpack_file, custom_name=None, icon_url=None):
                 "width": 1280,
                 "height": 720,
                 "fullscreen": False,
-                "java_path": DEFAULT_JAVA,
+                "java_path": best_java,
                 "version_name": folder_name,
                 "discord_rpc": True,
                 "loader": loader,
+                "loader_version": str(loader_ver_val) if loader_ver_val else "",
                 "mc_version": mc_ver,
                 "discord_large_image": installed_icon_url or "",
                 "icon_path": "icon.png" if os.path.exists(os.path.join(target_dir, "icon.png")) else ""
@@ -5189,11 +5705,270 @@ def install_from_zip(zip_file, custom_name=None, icon_url=None):
         print(f"{C_RED}E: Failed to process ZIP file: {e}{CLR_RESET}")
         return None
 
+def install_modrinth_package(slug_or_id, project_type=None, version_dir=None, non_interactive=True, progress_cb=None):
+    """
+    Universal package installer for Modrinth:
+    - modpack: downloads .mrpack and unpacks to versions/<modpack_name>
+    - mod: downloads .jar into <active_version>/mods/
+    - resourcepack: downloads .zip into <active_version>/resourcepacks/
+    - shader: downloads .zip into <active_version>/shaderpacks/
+    """
+    slug_or_id = str(slug_or_id).strip().strip('"').strip("'")
+    if not slug_or_id:
+        return {"success": False, "error": "No package slug or ID provided."}
+
+    v_dir = version_dir or get_active_version_dir()
+    cfg = load_config(v_dir) if v_dir else {}
+    mc_ver = cfg.get("mc_version", "1.20.1")
+    loader = cfg.get("loader", "Forge")
+
+    p_url = f"https://api.modrinth.com/v2/project/{urllib.parse.quote(slug_or_id)}"
+    headers = {'User-Agent': 'Moon-Launcher/2.0 (Mozilla/5.0)'}
+    try:
+        req = urllib.request.Request(p_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=12) as r:
+            project = json.loads(r.read().decode('utf-8'))
+    except Exception as e:
+        # Fallback search query
+        p_search_url = f"https://api.modrinth.com/v2/search?query={urllib.parse.quote_plus(slug_or_id)}&limit=5"
+        try:
+            req_s = urllib.request.Request(p_search_url, headers=headers)
+            with urllib.request.urlopen(req_s, timeout=12) as r_s:
+                s_res = json.loads(r_s.read().decode('utf-8'))
+                hits = s_res.get('hits', [])
+                if hits:
+                    p_id_match = hits[0].get('project_id') or hits[0].get('slug')
+                    return install_modrinth_package(p_id_match, project_type=hits[0].get('project_type'), version_dir=v_dir, non_interactive=non_interactive)
+        except Exception:
+            pass
+        return {"success": False, "error": f"Failed to fetch package '{slug_or_id}' from Modrinth: {e}"}
+
+    resolved_type = project.get("project_type", project_type or "mod")
+    title = project.get("title", slug_or_id)
+    icon_url = project.get("icon_url", "")
+    p_id = project.get("id", slug_or_id)
+
+    print()
+    print(f"{C_CYAN}Installing {title} (type: {resolved_type})...{CLR_RESET}")
+
+    params = {}
+    if resolved_type == "mod":
+        if loader and loader.lower() not in ("vanilla", "official"):
+            params["loaders"] = json.dumps([loader.lower()])
+        if mc_ver:
+            params["game_versions"] = json.dumps([mc_ver])
+    elif resolved_type in ("resourcepack", "shader"):
+        if mc_ver:
+            params["game_versions"] = json.dumps([mc_ver])
+
+    qs = f"?{urllib.parse.urlencode(params)}" if params else ""
+    v_url = f"https://api.modrinth.com/v2/project/{p_id}/version{qs}"
+    versions = []
+    try:
+        req_v = urllib.request.Request(v_url, headers=headers)
+        with urllib.request.urlopen(req_v, timeout=12) as r:
+            versions = json.loads(r.read().decode('utf-8'))
+    except Exception:
+        pass
+
+    if not versions:
+        fb_url = f"https://api.modrinth.com/v2/project/{p_id}/version"
+        try:
+            req_fb = urllib.request.Request(fb_url, headers=headers)
+            with urllib.request.urlopen(req_fb, timeout=12) as r:
+                versions = json.loads(r.read().decode('utf-8'))
+        except Exception as e:
+            return {"success": False, "error": f"Failed to fetch versions for {title}: {e}"}
+
+    if not versions:
+        return {"success": False, "error": f"No compatible versions found on Modrinth for {title}."}
+
+    chosen_v = versions[0]
+    files = chosen_v.get("files", [])
+    if not files:
+        return {"success": False, "error": f"No download files available in version {chosen_v.get('name')}."}
+
+    if resolved_type == "modpack":
+        mrpack_f = next((f for f in files if f.get('filename', '').endswith('.mrpack')), None)
+        if not mrpack_f:
+            for v_item in versions:
+                mrpack_f = next((f for f in v_item.get('files', []) if f.get('filename', '').endswith('.mrpack')), None)
+                if mrpack_f:
+                    chosen_v = v_item
+                    break
+        if not mrpack_f:
+            return {"success": False, "error": f"No .mrpack archive found for modpack {title}."}
+        primary_f = mrpack_f
+    else:
+        primary_f = next((f for f in files if f.get('primary')), files[0])
+
+    dl_url = primary_f.get("url")
+    filename = primary_f.get("filename")
+    if not dl_url or not filename:
+        return {"success": False, "error": "Invalid file entry returned by Modrinth."}
+
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+
+    if resolved_type == "modpack":
+        temp_mrpack = os.path.join(cur_dir, "runtime", filename)
+        os.makedirs(os.path.dirname(temp_mrpack), exist_ok=True)
+        if progress_cb:
+            progress_cb(step=f"Downloading {title} modpack archive...", percent=5, log=f"Fetching modpack package: {filename}")
+
+        def _mrpack_dl_cb(step="", current_bytes=0, total_bytes=0, percent=0, speed_str="", **kw):
+            if progress_cb:
+                mapped_pct = 5 + int(percent * 0.20)
+                mb_c = current_bytes / (1024 * 1024)
+                mb_t = total_bytes / (1024 * 1024) if total_bytes > 0 else 0
+                progress_cb(
+                    step=f"Downloading Modpack Archive ({mb_c:.1f}/{mb_t:.1f} MB)",
+                    current_file=filename,
+                    current_bytes=current_bytes,
+                    total_bytes=total_bytes,
+                    percent=mapped_pct,
+                    speed_str=speed_str,
+                    log=f"Get:1 {filename} [{mb_t:.1f} MB] ({speed_str})"
+                )
+
+        download_file_stream(dl_url, temp_mrpack, filename, get_idx=1, progress_cb=_mrpack_dl_cb)
+        new_dir = install_from_mrpack(temp_mrpack, custom_name=title, icon_url=icon_url, progress_cb=progress_cb)
+        try:
+            if os.path.exists(temp_mrpack):
+                os.remove(temp_mrpack)
+        except Exception:
+            pass
+        if new_dir:
+            return {
+                "success": True,
+                "type": "modpack",
+                "title": title,
+                "version_name": os.path.basename(new_dir),
+                "path": new_dir
+            }
+        else:
+            return {"success": False, "error": f"Failed to install modpack {title}."}
+
+    elif resolved_type == "mod":
+        mods_dir = os.path.join(v_dir, "mods")
+        os.makedirs(mods_dir, exist_ok=True)
+        dest_file = os.path.join(mods_dir, filename)
+        if progress_cb:
+            progress_cb(step=f"Downloading {title} mod...", percent=5, log=f"Fetching {filename}...")
+
+        def _mod_dl_cb(step="", current_bytes=0, total_bytes=0, percent=0, speed_str="", **kw):
+            if progress_cb:
+                mb_c = current_bytes / (1024 * 1024)
+                mb_t = total_bytes / (1024 * 1024) if total_bytes > 0 else 0
+                progress_cb(
+                    step=f"Downloading {filename} ({mb_c:.1f}/{mb_t:.1f} MB)",
+                    current_file=filename,
+                    current_bytes=current_bytes,
+                    total_bytes=total_bytes,
+                    percent=percent,
+                    speed_str=speed_str,
+                    log=f"Get:1 {filename} [{mb_t:.1f} MB] ({speed_str})"
+                )
+
+        ok = download_file_stream(dl_url, dest_file, filename, get_idx=1, progress_cb=_mod_dl_cb)
+        if not ok:
+            return {"success": False, "error": f"Failed to download mod file {filename}"}
+        if progress_cb:
+            progress_cb(step=f"Installed {filename} successfully!", percent=100, log=f"Mod {filename} saved in mods/")
+        print()
+        print(f"{C_GREEN}Mod installed successfully to:{CLR_RESET} {dest_file}")
+        return {
+            "success": True,
+            "type": "mod",
+            "title": title,
+            "filename": filename,
+            "path": dest_file,
+            "version_name": os.path.basename(v_dir)
+        }
+
+    elif resolved_type == "resourcepack":
+        rp_dir = os.path.join(v_dir, "resourcepacks")
+        os.makedirs(rp_dir, exist_ok=True)
+        dest_file = os.path.join(rp_dir, filename)
+        if progress_cb:
+            progress_cb(step=f"Downloading {title} resource pack...", percent=5, log=f"Fetching {filename}...")
+
+        def _rp_dl_cb(step="", current_bytes=0, total_bytes=0, percent=0, speed_str="", **kw):
+            if progress_cb:
+                mb_c = current_bytes / (1024 * 1024)
+                mb_t = total_bytes / (1024 * 1024) if total_bytes > 0 else 0
+                progress_cb(
+                    step=f"Downloading {filename} ({mb_c:.1f}/{mb_t:.1f} MB)",
+                    current_file=filename,
+                    current_bytes=current_bytes,
+                    total_bytes=total_bytes,
+                    percent=percent,
+                    speed_str=speed_str,
+                    log=f"Get:1 {filename} [{mb_t:.1f} MB] ({speed_str})"
+                )
+
+        ok = download_file_stream(dl_url, dest_file, filename, get_idx=1, progress_cb=_rp_dl_cb)
+        if not ok:
+            return {"success": False, "error": f"Failed to download resource pack {filename}"}
+        if progress_cb:
+            progress_cb(step=f"Installed {filename} successfully!", percent=100, log=f"Resource pack {filename} saved in resourcepacks/")
+        print()
+        print(f"{C_GREEN}Texture/Resource pack installed successfully to:{CLR_RESET} {dest_file}")
+        return {
+            "success": True,
+            "type": "resourcepack",
+            "title": title,
+            "filename": filename,
+            "path": dest_file,
+            "version_name": os.path.basename(v_dir)
+        }
+
+    elif resolved_type == "shader":
+        sp_dir = os.path.join(v_dir, "shaderpacks")
+        os.makedirs(sp_dir, exist_ok=True)
+        dest_file = os.path.join(sp_dir, filename)
+        if progress_cb:
+            progress_cb(step=f"Downloading {title} shader pack...", percent=5, log=f"Fetching {filename}...")
+
+        def _sp_dl_cb(step="", current_bytes=0, total_bytes=0, percent=0, speed_str="", **kw):
+            if progress_cb:
+                mb_c = current_bytes / (1024 * 1024)
+                mb_t = total_bytes / (1024 * 1024) if total_bytes > 0 else 0
+                progress_cb(
+                    step=f"Downloading {filename} ({mb_c:.1f}/{mb_t:.1f} MB)",
+                    current_file=filename,
+                    current_bytes=current_bytes,
+                    total_bytes=total_bytes,
+                    percent=percent,
+                    speed_str=speed_str,
+                    log=f"Get:1 {filename} [{mb_t:.1f} MB] ({speed_str})"
+                )
+
+        ok = download_file_stream(dl_url, dest_file, filename, get_idx=1, progress_cb=_sp_dl_cb)
+        if not ok:
+            return {"success": False, "error": f"Failed to download shader pack {filename}"}
+        if progress_cb:
+            progress_cb(step=f"Installed {filename} successfully!", percent=100, log=f"Shader pack {filename} saved in shaderpacks/")
+        print()
+        print(f"{C_GREEN}Shader pack installed successfully to:{CLR_RESET} {dest_file}")
+        return {
+            "success": True,
+            "type": "shader",
+            "title": title,
+            "filename": filename,
+            "path": dest_file,
+            "version_name": os.path.basename(v_dir)
+        }
+
+    else:
+        return {"success": False, "error": f"Unsupported package type: {resolved_type}"}
+
 def search_and_install_modrinth(query=None):
     if not query:
-        print(f"\n{C_WHITE}── Search Modpack on Modrinth ──{CLR_RESET}")
+        print()
+        print(f"{C_WHITE}── Search Packages on Modrinth ──{CLR_RESET}")
         try:
-            query = input(f"{C_AMBER}Enter modpack search keyword (e.g. homestead, cobblemon, optimize): {CLR_RESET}").strip()
+            print(f"{C_AMBER}Enter search keyword (e.g. appleskin, bare-bones, complementary, fabulously): {CLR_RESET}", end="", flush=True)
+            query = input().strip()
         except (KeyboardInterrupt, EOFError):
             print()
             return None
@@ -5202,63 +5977,48 @@ def search_and_install_modrinth(query=None):
             return None
 
     query = query.strip()
-    print(f"\n{C_CYAN}Searching for modpack '{query}' on Modrinth...{CLR_RESET}")
-    import urllib.parse
-    enc_q = urllib.parse.quote_plus(query)
+    res_direct = install_modrinth_package(query, non_interactive=False)
+    if res_direct and res_direct.get("success"):
+        return res_direct.get("path") if res_direct.get("type") == "modpack" else get_active_version_dir()
 
+    print()
+    print(f"{C_CYAN}Searching for '{query}' on Modrinth...{CLR_RESET}")
+    enc_q = urllib.parse.quote_plus(query)
     hits = []
-    # Clean API call without unencoded facets
     url = f"https://api.modrinth.com/v2/search?query={enc_q}&limit=20"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Moon-Launcher/2.0 (Mozilla/5.0)'})
         with urllib.request.urlopen(req, timeout=12) as r:
             res = json.loads(r.read())
-            all_hits = res.get('hits', [])
-            hits = [h for h in all_hits if h.get('project_type') == 'modpack']
+            hits = res.get('hits', [])
     except Exception as e:
         print(f"{C_RED}E: Search request error: {e}{CLR_RESET}")
 
-    # Fallback to direct project slug lookup if zero hits
     if not hits:
-        try:
-            p_url = f"https://api.modrinth.com/v2/project/{enc_q}"
-            req_p = urllib.request.Request(p_url, headers={'User-Agent': 'Moon-Launcher/2.0 (Mozilla/5.0)'})
-            with urllib.request.urlopen(req_p, timeout=10) as r:
-                p_data = json.loads(r.read())
-                if p_data.get('project_type') == 'modpack':
-                    hits.append({
-                        'title': p_data.get('title'),
-                        'project_id': p_data.get('id'),
-                        'categories': p_data.get('categories', []),
-                        'downloads': p_data.get('downloads', 0),
-                        'description': p_data.get('description', '')
-                    })
-        except Exception:
-            pass
-
-    if not hits:
-        print(f"{C_AMBER}No modpacks found matching '{query}'.{CLR_RESET}")
+        print(f"{C_AMBER}No packages found matching '{query}'.{CLR_RESET}")
         return None
 
-    print(f"\n{C_WHITE}Search Results:{CLR_RESET}")
+    print()
+    print(f"{C_WHITE}Search Results:{CLR_RESET}")
     max_disp = min(len(hits), 8)
     for idx, h in enumerate(hits[:max_disp], 1):
         title = h.get('title')
+        ptype = h.get('project_type', 'mod').upper()
         cats = ", ".join(h.get('categories', []))
         dl_cnt = h.get('downloads', 0)
         desc = truncate_ansi(h.get('description', ''), 60)
-        print(f"  {C_CYAN}[{idx}]{CLR_RESET} {C_WHITE}\033[1m{title}\033[0m {C_MUTED}({cats}) • {dl_cnt:,} downloads{CLR_RESET}")
+        print(f"  {C_CYAN}[{idx}]{CLR_RESET} {C_WHITE}{title}{CLR_RESET} {C_MUTED}[{ptype}] ({cats}) • {dl_cnt:,} dl{CLR_RESET}")
         print(f"      {C_MUTED}{desc}{CLR_RESET}")
 
-    sel_prompt = f"\n{C_AMBER}Select modpack [1-{max_disp}] (Press ENTER for [1], or 0 to cancel): {CLR_RESET}"
     try:
-        sel = input(sel_prompt).strip()
+        print()
+        print(f"{C_AMBER}Select package [1-{max_disp}] (Press ENTER for [1], or 0 to cancel): {CLR_RESET}", end="", flush=True)
+        sel = input().strip()
     except (KeyboardInterrupt, EOFError):
         print()
         return None
 
     if not sel:
-        # Default to 1 (top search match)
         sel = "1"
     elif sel in ('0', 'q', 'cancel', 'exit'):
         print(f"{C_MUTED}Search cancelled.{CLR_RESET}")
@@ -5268,61 +6028,11 @@ def search_and_install_modrinth(query=None):
         return None
 
     chosen = hits[int(sel) - 1]
-    chosen_id = chosen.get('project_id')
-    print(f"\n{C_CYAN}Fetching release versions for '{chosen.get('title')}'...{CLR_RESET}")
-
-    v_url = f"https://api.modrinth.com/v2/project/{chosen_id}/version"
-    try:
-        req = urllib.request.Request(v_url, headers={'User-Agent': 'Moon-Launcher/2.0 (Mozilla/5.0)'})
-        with urllib.request.urlopen(req, timeout=15) as r:
-            versions = json.loads(r.read())
-        if not versions:
-            print(f"{C_RED}E: No versions found for this modpack.{CLR_RESET}")
-            return None
-
-        valid_versions = []
-        for v in versions:
-            mrpack_f = next((f for f in v.get('files', []) if f.get('filename', '').endswith('.mrpack')), None)
-            if mrpack_f:
-                valid_versions.append((v, mrpack_f))
-
-        if not valid_versions:
-            print(f"{C_RED}E: No .mrpack file found for this modpack.{CLR_RESET}")
-            return None
-
-        chosen_v, mrpack_item = valid_versions[0]
-        if len(valid_versions) > 1:
-            print(f"\n{C_WHITE}Available Versions for {chosen.get('title')}:{CLR_RESET}")
-            sample_v = valid_versions[:5]
-            for v_idx, (v_obj, f_obj) in enumerate(sample_v, 1):
-                v_name = v_obj.get('name', '')
-                g_vers = ", ".join(v_obj.get('game_versions', []))
-                loaders = ", ".join(v_obj.get('loaders', []))
-                sz_mb = f_obj.get('size', 0) / (1024 * 1024)
-                print(f"  {C_CYAN}[{v_idx}]{CLR_RESET} {C_WHITE}{v_name}{CLR_RESET} {C_MUTED}(MC {g_vers} • {loaders} • {sz_mb:.1f} MB){CLR_RESET}")
-            try:
-                v_choice = input(f"\n{C_AMBER}Select version [1-{len(sample_v)}] (press ENTER for latest [1]): {CLR_RESET}").strip()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                return None
-            if v_choice.isdigit() and 1 <= int(v_choice) <= len(sample_v):
-                chosen_v, mrpack_item = sample_v[int(v_choice) - 1]
-
-        cur_dir = os.path.dirname(os.path.abspath(__file__))
-        temp_mrpack = os.path.join(cur_dir, "runtime", mrpack_item['filename'])
-        os.makedirs(os.path.dirname(temp_mrpack), exist_ok=True)
-        download_file_stream(mrpack_item['url'], temp_mrpack, mrpack_item['filename'], get_idx=1)
-
-        installed_dir = install_from_mrpack(temp_mrpack, chosen.get('title'), icon_url=chosen.get('icon_url'))
-        try:
-            if os.path.exists(temp_mrpack):
-                os.remove(temp_mrpack)
-        except Exception:
-            pass
-        return installed_dir
-    except Exception as e:
-        print(f"{C_RED}E: Failed to download modpack: {e}{CLR_RESET}")
-        return None
+    chosen_id = chosen.get('project_id') or chosen.get('slug')
+    res_inst = install_modrinth_package(chosen_id, project_type=chosen.get('project_type'), non_interactive=False)
+    if res_inst and res_inst.get("success"):
+        return res_inst.get("path") if res_inst.get("type") == "modpack" else get_active_version_dir()
+    return None
 
 def run_installer_studio(version_dir, cfg, args=None):
     if args:
@@ -5402,8 +6112,14 @@ def run_installer_studio(version_dir, cfg, args=None):
             return version_dir, cfg
 
         else:
-            # Fallback to direct search (e.g. /install homestead)
+            # Fallback to direct package install or search
             q = " ".join(args)
+            res = install_modrinth_package(q, non_interactive=False, version_dir=version_dir)
+            if res and res.get("success"):
+                if res.get("type") == "modpack" and res.get("path"):
+                    new_d = res["path"]
+                    return new_d, load_config(new_d)
+                return version_dir, cfg
             new_d = search_and_install_modrinth(q)
             if new_d:
                 return new_d, load_config(new_d)
@@ -5481,7 +6197,7 @@ def run_installer_studio(version_dir, cfg, args=None):
 
 def main():
     if sys.platform == 'win32':
-        os.system('title Moon Launcher')
+        (os.system('title Moon Launcher') if (sys.platform == 'win32' and sys.stdout and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) else 0)
 
     # Auto-register moon:// Windows protocol handler
     network_hub.register_windows_protocol_handler()
@@ -5498,12 +6214,19 @@ def main():
 
     # Start Native Zero-Config LAN & Radmin P2P Skin Auto-Sync Service
     network_hub.start_lan_skin_service(cfg.get('username', 'Player'), version_dir)
+    network_hub.update_active_version(version_dir, cfg.get('version_name'))
+    network_hub.start_cloud_presence_service(cfg.get('username', 'Player'))
+    updater.start_background_update_checker()
 
     # Process CLI arguments if passed (e.g. python launcher.py /play or /install homestead)
     if len(sys.argv) > 1:
         arg_cmd = sys.argv[1].lower()
         if arg_cmd in ('/play', 'play', '/p', 'p', '/start', 'start', '/launch', 'launch'):
-            launch_game(version_dir, cfg)
+            proc = launch_game(version_dir, cfg)
+            if proc and sys.stdout.isatty():
+                print(f"\n{C_MUTED}Press ENTER to exit or leave this terminal open...{CLR_RESET}", end="", flush=True)
+                try: input()
+                except (KeyboardInterrupt, EOFError): pass
             return
         elif arg_cmd in ('/test', 'test', '/dryrun', 'dryrun', '/check', 'check'):
             target_arg = ' '.join(sys.argv[2:]) if len(sys.argv) > 2 else None
@@ -5531,11 +6254,19 @@ def main():
                 print(f"\n{C_CYAN}[Moon Launcher] Current player username:{CLR_RESET} {cfg.get('username', 'Player')}")
                 print(f"{C_MUTED}To change: /username <new_name> or /setting user <new_name>{CLR_RESET}")
             return
+        elif arg_cmd in ('/pack', 'pack', '/sharepack', 'sharepack'):
+            handle_pack_share_command(sys.argv[2:], version_dir, cfg)
+            return
+
+        elif arg_cmd.upper().startswith(('MOON-PACK-', 'PACK-')):
+            handle_pack_share_command(['receive', sys.argv[1]], version_dir, cfg)
+            return
+
         elif arg_cmd in ('/host', 'host', '/lan', 'lan', '/tunnel', 'tunnel'):
             network_hub.handle_host_command(sys.argv[2:], version_dir)
             return
-        elif arg_cmd.startswith(('moon://', 'https://moonlauncher.link/', 'http://moonlauncher.link/')) or ('user=' in arg_cmd and 'addr=' in arg_cmd):
-            network_hub.handle_friend_command(['add', sys.argv[1]], version_dir)
+        elif arg_cmd.startswith(('moon://', 'https://moonlauncher.link/', 'http://moonlauncher.link/', 'https://moonlauncher.app/')) or ('user=' in arg_cmd and 'addr=' in arg_cmd):
+            network_hub.handle_moon_protocol_url(sys.argv[1], version_dir)
             print(f"\n{C_MUTED}Press ENTER to exit...{CLR_RESET}", end="", flush=True)
             try: input()
             except (KeyboardInterrupt, EOFError): pass
@@ -5610,6 +6341,12 @@ def main():
         elif arg_cmd in ('/open', 'open', '/o', 'o'):
             sub_folder = sys.argv[2].lower() if len(sys.argv) > 2 else None
             open_folder(version_dir, sub_folder)
+            return
+        elif arg_cmd in ('/update', 'update', '/upgrade', 'upgrade', '/u', 'u'):
+            updater.handle_update_command(sys.argv[2:], version_dir, cfg)
+            print(f"\n{C_MUTED}Press ENTER to exit...{CLR_RESET}", end="", flush=True)
+            try: input()
+            except (KeyboardInterrupt, EOFError): pass
             return
         elif arg_cmd in ('/crash', 'crash', '/logs', 'logs', '/log', 'log'):
             show_crash_report(version_dir)
@@ -5697,14 +6434,37 @@ def main():
                     print(f"{C_CYAN}[Moon Launcher] Current player username:{CLR_RESET} {cfg.get('username', 'Player')}")
                     print(f"{C_MUTED}To change: /username <new_name> or /setting user <new_name>{CLR_RESET}\n")
 
+            elif cmd in ('/pack', 'pack', '/sharepack', 'sharepack', '/share-pack', 'share-pack'):
+                res_switch = handle_pack_share_command(raw_parts[1:], version_dir, cfg)
+                if res_switch and isinstance(res_switch, tuple):
+                    version_dir, cfg = res_switch
+
+            elif cmd.upper().startswith(('MOON-PACK-', 'PACK-')) or (len(cmd) == 4 and cmd.isdigit()):
+                res_switch = handle_pack_share_command(['receive', user_input.strip()], version_dir, cfg)
+                if res_switch and isinstance(res_switch, tuple):
+                    version_dir, cfg = res_switch
+
+            elif cmd in ('/cloud', 'cloud', '/supabase', 'supabase'):
+                network_hub.handle_cloud_command(raw_parts[1:])
+
             elif cmd in ('/host', 'host', '/lan', 'lan', '/tunnel', 'tunnel'):
                 network_hub.handle_host_command(raw_parts[1:], version_dir)
 
             elif cmd in ('/invite', 'invite', '/share', 'share'):
                 network_hub.handle_friend_command(['invite'], version_dir)
 
+            elif cmd in ('/update', 'update', '/upgrade', 'upgrade'):
+                updater.handle_update_command(raw_parts[1:], version_dir, cfg)
+
+            elif cmd in ('/player', 'player', '/profile', 'profile', '/whois', 'whois'):
+                target_id = raw_parts[1] if len(raw_parts) > 1 else cfg.get('username')
+                network_hub.show_player_profile_card(target_id, version_dir)
+
             elif cmd in ('/friend', 'friend', '/friends', 'friends'):
                 network_hub.handle_friend_command(raw_parts[1:], version_dir)
+
+            elif cmd in ('/join', 'join', '/mabar', 'mabar'):
+                network_hub.handle_friend_command(['join'] + raw_parts[1:], version_dir)
 
             elif (cmd.startswith(('moon://', 'http://', 'https://')) or 'user=' in user_input) and network_hub.parse_friend_invite(user_input):
                 network_hub.handle_friend_command(['add', user_input], version_dir)

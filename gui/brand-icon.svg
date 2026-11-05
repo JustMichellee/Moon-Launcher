@@ -1,0 +1,12 @@
+﻿<svg xmlns=http://www.w3.org/2000/svg viewBox=0 0 512 512 width=512 height=512 fill=none>
+  <!-- Hard Shadow (Neo-Brutalist offset bottom-right) -->
+  <rect x=76 y=68 width=384 height=384 rx=84 ry=84 fill=#161622 />
+
+  <!-- Main Periwinkle Rounded Tile -->
+  <rect x=48 y=40 width=384 height=384 rx=84 ry=84 fill=#9FA0FF stroke=#161622 stroke-width=24 stroke-linejoin=round />
+
+  <!-- Moon Crescent Glyph (Hollow / Transparent center) -->
+  <g transform=translate(120, 112) scale(10)>
+    <path d=M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z fill=none stroke=#161622 stroke-width=2.3 stroke-linecap=round stroke-linejoin=round />
+  </g>
+</svg>

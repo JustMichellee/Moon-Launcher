@@ -89,7 +89,7 @@ def copy_to_clipboard(text):
         pass
     try:
         cmd = f'Set-Clipboard -Value "{text}"'
-        res = subprocess.run(['powershell', '-NoProfile', '-Command', cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        res = subprocess.run(['powershell', '-NoProfile', '-Command', cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
         return res.returncode == 0
     except Exception:
         pass
@@ -99,7 +99,7 @@ def get_clipboard_text():
     """Reads text from Windows system clipboard."""
     if sys.platform == 'win32':
         try:
-            res = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'], capture_output=True, text=True, timeout=2)
+            res = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'], capture_output=True, text=True, timeout=2, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
             return res.stdout.strip()
         except Exception:
             pass
@@ -122,6 +122,73 @@ def register_windows_protocol_handler():
         winreg.CloseKey(key)
         return True
     except Exception:
+        return False
+
+def handle_moon_protocol_url(url_str, version_dir=None):
+    """
+    Handles moon:// protocol URLs launched from web browser or OS.
+    Supported formats:
+    - moon://install/<slug_or_id>
+    - moon://join/<server_addr>
+    - moon://friend/add?user=...&addr=...
+    - moon://player/<player_id>
+    - moon://home
+    """
+    raw = str(url_str).strip().strip('"').strip("'")
+    print(f"\n{C_WHITE}Handling Moon Protocol URL: {C_CYAN}{raw}{CLR_RESET}")
+    try:
+        parsed = urllib.parse.urlparse(raw)
+    except Exception as e:
+        print(f"{C_RED}Invalid URL: {e}{CLR_RESET}")
+        return False
+
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc.lower()
+    path = parsed.path.strip('/')
+
+    action = netloc if scheme == 'moon' else ''
+    if not action:
+        parts = [p for p in path.split('/') if p]
+        if parts:
+            action = parts[0].lower()
+            target = parts[1] if len(parts) > 1 else ""
+        else:
+            target = ""
+    else:
+        target = path
+
+    target = target.strip('/')
+
+    if action in ('install', 'download', 'modpack', 'mod', 'shader', 'resourcepack'):
+        p_type = action if action in ('mod', 'shader', 'resourcepack', 'modpack') else None
+        slug = target
+        if not slug and '/' in target:
+            slug = target.split('/')[-1]
+        print(f"\n{C_CYAN}Installing package '{slug}' from protocol URL...{CLR_RESET}")
+        import launcher
+        res = launcher.install_modrinth_package(slug, project_type=p_type, version_dir=version_dir, non_interactive=False)
+        return res.get("success", False) if isinstance(res, dict) else bool(res)
+
+    elif action in ('join', 'connect', 'play'):
+        addr = target or parsed.netloc
+        print(f"\n{C_GREEN}Direct joining server: {addr}...{CLR_RESET}")
+        import launcher
+        cfg = launcher.load_config(version_dir) if version_dir else {}
+        launcher.launch_game(version_dir, cfg, direct_server=addr)
+        return True
+
+    elif action in ('home', 'dashboard', 'gui', 'launcher'):
+        print(f"\n{C_CYAN}Launching Moon Launcher Desktop Studio...{CLR_RESET}")
+        gui_script = os.path.join(BASE_DIR, "gui_app.py")
+        subprocess.Popen([sys.executable, gui_script], cwd=BASE_DIR)
+        return True
+
+    else:
+        invite_data = parse_friend_invite(raw)
+        if invite_data:
+            handle_friend_command(['add', invite_data.get('user', ''), invite_data.get('addr', '')], active_version_dir=version_dir)
+            return True
+        print(f"{C_AMBER}Unknown action in protocol URL: {action}{CLR_RESET}")
         return False
 
 def generate_friend_invite_link(username, server_address=None, note=None):
@@ -610,55 +677,100 @@ def get_tunnel_status():
 
 def handle_friend_command(args, active_version_dir=None):
     """
-    Handles /friend commands:
-    - /friend (or /friend list)
-    - /friend invite (or /friend share, /friend link) -> Generates & copies invite link
-    - /friend add <link_or_name> [ip:port]
-    - /friend remove <name>
-    - /friend ping <name>
-    - /friend note <name> <text>
+    Handles /friend commands using the unique MOON-XXXX ID system:
+    - /friend (or /friend list) -> Displays contacts with Moon ID & live status
+    - /friend invite -> Displays shareable invite link & your Moon ID
+    - /friend add <MOON-ID> [optional_addr] -> Resolves & adds friend via Moon ID
+    - /friend remove <MOON-ID or name> -> Removes friend
+    - /friend join <name or ID> -> Connects to friend's world
+    - /friend ping <name or ID> -> Pings server/status
     """
     data = load_network_data()
-    friends = data.get("friends", [])
+    raw_friends = data.get("friends", [])
+
+    # Filter out current active username & Moon ID
+    my_uname = ""
+    my_moon_id = get_or_create_moon_id()
+    try:
+        import launcher
+        my_uname = launcher.load_config().get("username", "").strip().lower()
+    except Exception:
+        pass
+
+    friends = [
+        f for f in raw_friends
+        if (isinstance(f, dict) and f.get("username", "").strip().lower() != my_uname and f.get("player_id", "").strip().upper() != my_moon_id and f.get("note") != "Primary Profile")
+        or (isinstance(f, str) and f.strip().lower() != my_uname)
+    ]
 
     if not args or args[0].lower() in ("list", "ls", "show"):
         # Display Friends Table
-        box_w = 68
-        lines = [
-            f"{C_WHITE}\033[1mPlayer Friends & Mabar Contacts\033[0m",
+        box_w = 72
+        lines_box = [
+            f"{C_WHITE}Player Friends & Multiplayer Contacts",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Your Moon ID :{CLR_RESET} {C_GREEN}\033[1m{my_moon_id}\033[0m {C_MUTED}(Share with friends to connect!){CLR_RESET}",
             f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
         ]
 
         if not friends:
-            lines.append(f"{C_MUTED}No friends added yet.{CLR_RESET}")
-            lines.append(f"{C_MUTED}Add friends via link: {C_CYAN}/friend add <invite_link>{CLR_RESET}")
-            lines.append(f"{C_MUTED}Share your invite link: {C_AMBER}/friend invite{CLR_RESET}")
+            lines_box.append(f"{C_MUTED}No friends added yet.{CLR_RESET}")
+            lines_box.append(f"{C_MUTED}Add friends by Moon ID: {C_CYAN}/friend add <MOON-XXXX>{CLR_RESET}")
+            lines_box.append(f"{C_MUTED}Example: {C_WHITE}/friend add MOON-4821{CLR_RESET}")
         else:
+            lines_box.append(f"  {C_MUTED}{'STATUS':<9} {'MOON ID':<11} {'USERNAME':<16} {'ACTIVITY / ADDRESS'}{CLR_RESET}")
+            lines_box.append(f"  {C_MUTED}{'─'*8}  {'─'*10}  {'─'*15}  {'─'*24}{CLR_RESET}")
             for idx, f_item in enumerate(friends, 1):
-                u_name = f_item.get("username", "Unknown")
-                addr = f_item.get("address", "")
-                note = f_item.get("note", "")
+                if isinstance(f_item, str):
+                    p_id = f"MOON-{abs(hash(f_item)) % 9000 + 1000}"
+                    u_name = f_item
+                    addr = ""
+                    note = ""
+                else:
+                    p_id = f_item.get("player_id") or f"MOON-{abs(hash(f_item.get('username', ''))) % 9000 + 1000}"
+                    u_name = f_item.get("username", p_id)
+                    addr = f_item.get("address", "")
+                    note = f_item.get("note", "")
 
                 status_tag = f"{C_MUTED}[OFFLINE]{CLR_RESET}"
-                ping_detail = f"{C_MUTED}No Address{CLR_RESET}"
+                ping_detail = f"{C_MUTED}Offline{CLR_RESET}"
 
-                if addr:
+                peer_meta = None
+                with CLOUD_PEERS_LOCK:
+                    peer_meta = CLOUD_PEERS.get(p_id.lower()) or CLOUD_PEERS.get(u_name.lower())
+                if not peer_meta:
+                    with LAN_PEERS_LOCK:
+                        peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == u_name.lower()), None)
+
+                if peer_meta and peer_meta.get("version_name"):
+                    v_name = peer_meta.get("version_name")
+                    m_cnt = peer_meta.get("mod_count", 0)
+                    status_tag = f"{C_GREEN}[PLAYING]{CLR_RESET}"
+                    ping_detail = f"{C_WHITE}{v_name}{CLR_RESET} ({m_cnt} mods)"
+                elif peer_meta and peer_meta.get("status") in ("online", "in_game"):
+                    status_tag = f"{C_CYAN}[ONLINE ]{CLR_RESET}"
+                    ping_detail = f"{C_CYAN}In Launcher{CLR_RESET}"
+                elif addr:
                     p_res = ping_minecraft_server(addr, timeout=1.2)
                     if p_res["online"]:
-                        status_tag = f"{C_GREEN}[ONLINE]{CLR_RESET}"
+                        status_tag = f"{C_GREEN}[ONLINE ]{CLR_RESET}"
                         ping_detail = f"{C_GREEN}{p_res['latency']}ms{CLR_RESET} ({p_res['players_online']} players)"
                     else:
-                        status_tag = f"{C_RED}[IDLE]{CLR_RESET}"
+                        status_tag = f"{C_RED}[IDLE   ]{CLR_RESET}"
                         ping_detail = f"{C_MUTED}{addr}{CLR_RESET}"
 
-                name_col = f"{C_CYAN}{u_name}{CLR_RESET}"
-                lines.append(f"  {status_tag} {name_col:<20} {ping_detail}")
+                p_id_str = f"{p_id:<11}"
+                u_name_str = f"{u_name:<16}"
+                lines_box.append(f"  {status_tag} {C_AMBER}{p_id_str}{CLR_RESET} {C_CYAN}{u_name_str}{CLR_RESET} {ping_detail}")
+                if peer_meta and peer_meta.get("version_name"):
+                    lines_box.append(f"     {C_CYAN}↳ Join: Type /friend join {p_id}{CLR_RESET}")
                 if note:
-                    lines.append(f"     {C_MUTED}* Note: {note}{CLR_RESET}")
+                    lines_box.append(f"     {C_MUTED}* Note: {note}{CLR_RESET}")
 
-        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
-        lines.append(f"{C_MUTED}Commands: /friend invite • /friend add <link> • /friend ping <name>{CLR_RESET}")
-        print("\n" + render_box(lines, box_w, title="Friends Hub") + "\n")
+        lines_box.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines_box.append(f"{C_MUTED}Commands: {C_WHITE}/friend add <MOON-XXXX>{C_MUTED}  •  {C_WHITE}/friend remove <MOON-ID>{CLR_RESET}")
+        lines_box.append(f"{C_MUTED}          {C_WHITE}/friend join <name/ID>{C_MUTED}   •  {C_WHITE}/friend invite{CLR_RESET}")
+        print("\n" + render_box(lines_box, box_w, title="Friends Hub") + "\n")
         return
 
     sub = args[0].lower()
@@ -672,7 +784,6 @@ def handle_friend_command(args, active_version_dir=None):
 
     # /friend invite / share / link
     if sub in ("invite", "share", "link", "getlink", "code"):
-        # Resolve active player username
         username = "Player"
         script_dir = BASE_DIR
         local_cfg = os.path.join(script_dir, "launcher_config.json")
@@ -694,17 +805,18 @@ def handle_friend_command(args, active_version_dir=None):
         copied = copy_to_clipboard(invite["web_link"])
 
         box_w = 70
-        lines = [
+        lines_box = [
             f"{C_WHITE}\033[1mFriend & Multiplayer Invite Link\033[0m",
             f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Your Moon ID    :{CLR_RESET} {C_GREEN}\033[1m{my_moon_id}\033[0m",
             f"  {C_WHITE}* Player Profile  :{CLR_RESET} {C_CYAN}\033[1m{username}\033[0m",
         ]
         if server_addr:
-            lines.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_GREEN}{server_addr} (Tunnel Active){CLR_RESET}")
+            lines_box.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_GREEN}{server_addr} (Tunnel Active){CLR_RESET}")
         else:
-            lines.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_MUTED}None (Start /host to include your game world){CLR_RESET}")
+            lines_box.append(f"  {C_WHITE}* Live Server     :{CLR_RESET} {C_MUTED}None (Start /host to include your game world){CLR_RESET}")
 
-        lines.extend([
+        lines_box.extend([
             f"",
             f"  {C_WHITE}\033[1mShareable Web Link:\033[0m",
             f"  {C_CYAN}{invite['web_link']}{CLR_RESET}",
@@ -714,23 +826,22 @@ def handle_friend_command(args, active_version_dir=None):
             f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
         ])
         if copied:
-            lines.append(f"  {C_GREEN}[COPIED TO CLIPBOARD]{CLR_RESET} {C_WHITE}Press Ctrl+V to share on Discord or WhatsApp!{CLR_RESET}")
+            lines_box.append(f"  {C_GREEN}[COPIED TO CLIPBOARD]{CLR_RESET} {C_WHITE}Press Ctrl+V to share on Discord or WhatsApp!{CLR_RESET}")
         else:
-            lines.append(f"  {C_MUTED}Copy and send the link above to your friends!{CLR_RESET}")
-        lines.append(f"  {C_MUTED}Your friends can paste this link into Moon Launcher to add you!{CLR_RESET}")
+            lines_box.append(f"  {C_MUTED}Copy and send your Moon ID ({my_moon_id}) or link to friends!{CLR_RESET}")
+        lines_box.append(f"  {C_MUTED}Friends can add you instantly via: /friend add {my_moon_id}{CLR_RESET}")
 
-        print("\n" + render_box(lines, box_w, title="Invite Link") + "\n")
+        print("\n" + render_box(lines_box, box_w, title="Invite Link") + "\n")
         return
 
-    # /friend add <name_or_link> [address]
+    # /friend add <MOON-ID> [address]
     elif sub in ("add", "new", "+"):
         if len(args) < 2:
-            # Check clipboard for invite link
             clip = get_clipboard_text()
             inv = parse_friend_invite(clip)
             if inv:
                 print(f"\n{C_CYAN}Found Friend Invite in Clipboard:{CLR_RESET}")
-                print(f"  Player : {C_WHITE}{inv['username']}{CLR_RESET}")
+                print(f"  Player : {C_WHITE}{inv.get('username')}{CLR_RESET}")
                 if inv.get('address'):
                     print(f"  Server : {C_GREEN}{inv['address']}{CLR_RESET}")
                 try:
@@ -745,109 +856,460 @@ def handle_friend_command(args, active_version_dir=None):
                     print(f"{C_MUTED}Cancelled.{CLR_RESET}\n")
                     return
 
-            print(f"\n{C_RED}Usage: /friend add <username> [ip:port]{CLR_RESET}")
-            print(f"{C_MUTED}Or paste an invite link: /friend add https://moonlauncher.link/add?user=...{CLR_RESET}\n")
+            print(f"\n{C_RED}Usage: /friend add <MOON-XXXX> [optional_server_ip:port]{CLR_RESET}")
+            print(f"{C_MUTED}Example: /friend add MOON-4821{CLR_RESET}\n")
             return
 
-        # Check if argument 1 is an invite link or token
         inv = parse_friend_invite(args[1])
         if inv:
             add_friend_from_invite(inv, data)
             return
 
-        u_name = args[1].strip().replace(" ", "_")
-        addr = args[2].strip() if len(args) > 2 else ""
+        target_input = args[1].strip()
+        resolved = resolve_player_by_moon_id(target_input)
+        if not resolved:
+            clean_id = target_input.upper()
+            if not clean_id.startswith("MOON-") and clean_id.isalnum() and len(clean_id) <= 6:
+                clean_id = f"MOON-{clean_id}"
+            resolved = {"player_id": clean_id, "username": clean_id, "status": "offline"}
+
+        friend_id = resolved.get("player_id")
+        friend_uname = resolved.get("username", friend_id)
+        addr = args[2].strip() if len(args) > 2 else resolved.get("server_addr", "")
 
         # Check existing
-        for item in friends:
-            if item.get("username", "").lower() == u_name.lower():
-                item["address"] = addr or item.get("address", "")
+        all_friends = data.setdefault("friends", [])
+        for item in all_friends:
+            if isinstance(item, dict) and (item.get("player_id", "").upper() == friend_id.upper() or item.get("username", "").lower() == friend_uname.lower()):
+                item["player_id"] = friend_id
+                item["username"] = friend_uname
+                if addr: item["address"] = addr
                 save_network_data(data)
-                print(f"\n{C_GREEN}[OK] Updated contact for friend '{u_name}'!{CLR_RESET}\n")
+                print(f"\n{C_GREEN}[OK] Updated contact for friend {friend_id} ({friend_uname})!{CLR_RESET}\n")
                 return
 
-        friends.append({
-            "username": u_name,
+        all_friends.append({
+            "player_id": friend_id,
+            "username": friend_uname,
             "address": addr,
             "note": "",
             "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
         })
         save_network_data(data)
-        print(f"\n{C_GREEN}[OK] Friend '{u_name}' added to your contacts list!{CLR_RESET}")
-        if addr:
-            print(f"{C_MUTED}Server Address: {addr}{CLR_RESET}\n")
-        else:
-            print(f"{C_MUTED}Tip: To generate invite link: /friend invite{CLR_RESET}\n")
 
-    # /friend remove <name>
+        box_w = 68
+        lines_box = [
+            f"{C_GREEN}\033[1m[OK] Friend Added by Moon ID!\033[0m",
+            f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+            f"  {C_WHITE}* Moon ID         :{CLR_RESET} {C_AMBER}\033[1m{friend_id}\033[0m",
+            f"  {C_WHITE}* Player Name     :{CLR_RESET} {C_CYAN}{friend_uname}{CLR_RESET}",
+            f"  {C_WHITE}* Status          :{CLR_RESET} {C_GREEN if resolved.get('status') in ('online', 'playing') else C_MUTED}{resolved.get('status', 'offline').upper()}{CLR_RESET}",
+        ]
+        if addr:
+            lines_box.append(f"  {C_WHITE}* Server Address  :{CLR_RESET} {C_WHITE}{addr}{CLR_RESET}")
+        lines_box.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        print("\n" + render_box(lines_box, box_w, title="Friend Added") + "\n")
+
+    # /friend remove <MOON-ID or name>
     elif sub in ("remove", "delete", "rm", "-"):
         if len(args) < 2:
-            print(f"\n{C_RED}Usage: /friend remove <username>{CLR_RESET}\n")
+            print(f"\n{C_RED}Usage: /friend remove <MOON-XXXX or username>{CLR_RESET}\n")
             return
-        u_name = args[1].lower()
-        new_friends = [f for f in friends if f.get("username", "").lower() != u_name]
-        if len(new_friends) == len(friends):
+        target = args[1].strip().lower()
+        new_friends = [
+            f for f in data.get("friends", [])
+            if (isinstance(f, dict) and f.get("player_id", "").lower() != target and f.get("username", "").lower() != target)
+            or (isinstance(f, str) and f.lower() != target)
+        ]
+        if len(new_friends) == len(data.get("friends", [])):
             print(f"\n{C_AMBER}Friend '{args[1]}' not found in contact list.{CLR_RESET}\n")
         else:
             data["friends"] = new_friends
             save_network_data(data)
             print(f"\n{C_GREEN}[OK] Removed '{args[1]}' from your friends list.{CLR_RESET}\n")
 
-    # /friend ping <name>
-    elif sub in ("ping", "check"):
+    # /friend join <name or ID>
+    elif sub in ("join", "connect", "play"):
         if len(args) < 2:
-            print(f"\n{C_RED}Usage: /friend ping <username>{CLR_RESET}\n")
+            print(f"\n{C_RED}Usage: /friend join <MOON-ID or username>{CLR_RESET}\n")
             return
-        target = args[1].lower()
-        matched = next((f for f in friends if f.get("username", "").lower() == target), None)
-        if not matched or not matched.get("address"):
-            print(f"\n{C_AMBER}No server address saved for friend '{args[1]}'.{CLR_RESET}")
-            print(f"{C_MUTED}Set address with: /friend add {args[1]} <ip:port>{CLR_RESET}\n")
+        target_name = args[1].strip()
+        peer_meta = None
+        with CLOUD_PEERS_LOCK:
+            peer_meta = CLOUD_PEERS.get(target_name.lower())
+        if not peer_meta:
+            with LAN_PEERS_LOCK:
+                peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == target_name.lower()), None)
+        if not peer_meta:
+            peer_meta = resolve_player_by_moon_id(target_name)
+
+        if not peer_meta or not peer_meta.get("server_addr"):
+            print(f"\n{C_AMBER}Friend '{target_name}' is not currently hosting an accessible world tunnel.{CLR_RESET}\n")
             return
 
-        addr = matched["address"]
-        print(f"\n{C_CYAN}Pinging {matched['username']}'s server at {addr}...{CLR_RESET}")
-        res = ping_minecraft_server(addr, timeout=3.0)
-        box_w = 66
-        if res["online"]:
-            p_lines = [
-                f"{C_GREEN}[PASS] Server is ONLINE!{CLR_RESET}",
-                f"{C_WHITE}Host Friend :{CLR_RESET} {matched['username']}",
-                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
-                f"{C_WHITE}Latency     :{CLR_RESET} {res['latency']} ms",
-                f"{C_WHITE}Players     :{CLR_RESET} {res['players_online']} / {res['players_max']}",
-                f"{C_WHITE}Version     :{CLR_RESET} {res['version']}",
-                f"{C_WHITE}MOTD        :{CLR_RESET} {res['motd']}"
-            ]
-        else:
-            p_lines = [
-                f"{C_RED}[FAIL] Server is OFFLINE or Unreachable{CLR_RESET}",
-                f"{C_WHITE}Host Friend :{CLR_RESET} {matched['username']}",
-                f"{C_WHITE}Address     :{CLR_RESET} {addr}",
-                f"{C_MUTED}Reason: {res['motd']}{CLR_RESET}"
-            ]
-        print("\n" + render_box(p_lines, box_w, title="Ping Results") + "\n")
+        target_srv = peer_meta["server_addr"]
+        print(f"\n{C_GREEN}[Connecting] Joining {target_name}'s game at {target_srv}...{CLR_RESET}\n")
+        import launcher
+        cfg = launcher.load_config()
+        launcher.launch_minecraft(active_version_dir, cfg, direct_server=target_srv)
 
-    # /friend note <name> <text>
-    elif sub in ("note", "memo"):
-        if len(args) < 3:
-            print(f"\n{C_RED}Usage: /friend note <username> <text>{CLR_RESET}\n")
+
+def get_or_create_moon_id(username=None):
+    """
+    Retrieves or generates a persistent, unique Moon ID for the player (e.g. MOON-4821).
+    Stores it in launcher_config.json so it remains static across sessions.
+    """
+    config_path = os.path.join(BASE_DIR, "launcher_config.json")
+    cfg = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8-sig") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+
+    existing_id = cfg.get("moon_id") or cfg.get("player_id")
+    if existing_id and str(existing_id).upper().startswith("MOON-"):
+        return str(existing_id).upper()
+
+    u_name = username or cfg.get("username") or "Player"
+    code = abs(hash(u_name)) % 9000 + 1000
+    new_id = f"MOON-{code}"
+    cfg["moon_id"] = new_id
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+    return new_id
+
+
+def resolve_player_by_moon_id(moon_id_or_input):
+    """
+    Looks up player information by MOON-XXXX ID (or username fallback)
+    from Supabase presence & players tables and local peers.
+    Returns dict: {'player_id': ..., 'username': ..., 'status': ..., 'version_name': ..., 'server_addr': ...}
+    """
+    raw = str(moon_id_or_input).strip()
+    if not raw:
+        return None
+
+    clean_id = raw.upper()
+    if not clean_id.startswith("MOON-") and clean_id.isalnum() and len(clean_id) <= 6:
+        clean_id = f"MOON-{clean_id}"
+
+    # 1. Query Supabase
+    sb_url, sb_key = get_supabase_config()
+    if sb_url and sb_key:
+        try:
+            # Query presence table by player_id
+            endpoint = f"presence?player_id=eq.{urllib.parse.quote(clean_id)}"
+            res = supabase_api_request(endpoint, method="GET")
+            if isinstance(res, list) and res:
+                item = res[0]
+                return {
+                    "player_id": item.get("player_id", clean_id),
+                    "username": item.get("username", clean_id),
+                    "status": item.get("status", "online"),
+                    "version_name": item.get("version_name", ""),
+                    "server_addr": item.get("server_addr", "")
+                }
+
+            # Query players table by player_id
+            p_res = supabase_api_request(f"players?player_id=eq.{urllib.parse.quote(clean_id)}", method="GET")
+            if isinstance(p_res, list) and p_res:
+                p_item = p_res[0]
+                return {
+                    "player_id": p_item.get("player_id", clean_id),
+                    "username": p_item.get("username", clean_id),
+                    "status": "offline",
+                    "skin_url": p_item.get("skin_url", "")
+                }
+
+            # If user typed username, check presence & players by username
+            u_res = supabase_api_request(f"presence?username=ilike.{urllib.parse.quote(raw)}", method="GET")
+            if isinstance(u_res, list) and u_res:
+                u_item = u_res[0]
+                return {
+                    "player_id": u_item.get("player_id", f"MOON-{abs(hash(raw)) % 9000 + 1000}"),
+                    "username": u_item.get("username", raw),
+                    "status": u_item.get("status", "online"),
+                    "version_name": u_item.get("version_name", ""),
+                    "server_addr": u_item.get("server_addr", "")
+                }
+            p_u_res = supabase_api_request(f"players?username=ilike.{urllib.parse.quote(raw)}", method="GET")
+            if isinstance(p_u_res, list) and p_u_res:
+                pu_item = p_u_res[0]
+                return {
+                    "player_id": pu_item.get("player_id", f"MOON-{abs(hash(raw)) % 9000 + 1000}"),
+                    "username": pu_item.get("username", raw),
+                    "status": "offline",
+                    "skin_url": pu_item.get("skin_url", "")
+                }
+        except Exception:
+            pass
+
+    # 2. Local peers cache
+    with CLOUD_PEERS_LOCK:
+        for uname, p in CLOUD_PEERS.items():
+            if (p.get("player_id") and p.get("player_id").upper() == clean_id) or uname.lower() == raw.lower():
+                return {
+                    "player_id": p.get("player_id", clean_id),
+                    "username": p.get("username", uname),
+                    "status": p.get("status", "online"),
+                    "version_name": p.get("version_name", ""),
+                    "server_addr": p.get("server_addr", "")
+                }
+
+    # 3. Fallback when offline
+    if clean_id.startswith("MOON-"):
+        return {
+            "player_id": clean_id,
+            "username": clean_id,
+            "status": "offline"
+        }
+    return None
+
+
+# ==============================================================================
+# SUPABASE CLOUD PRESENCE & MATCHMAKING ENGINE
+# ==============================================================================
+
+def get_supabase_config():
+    """Retrieves configured Supabase URL and Anon Key from launcher config or environment."""
+    url = os.environ.get("MOON_SUPABASE_URL", "")
+    key = os.environ.get("MOON_SUPABASE_KEY", "")
+    
+    if not url or not key:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8-sig") as f:
+                    d = json.load(f)
+                    url = url or d.get("supabase_url", "")
+                    key = key or d.get("supabase_key", "")
+        except Exception:
+            pass
+            
+    DEFAULT_URL = "https://fcozsefkufbvztgniuwk.supabase.co"
+    DEFAULT_KEY = "sb_publishable_4NvjQ6A6TS9fBAFQpjWyaA_WjgP8BuZ"
+    if not url:
+        url = DEFAULT_URL
+    if not key:
+        key = DEFAULT_KEY
+            
+    return url.strip().rstrip('/'), key.strip()
+
+def set_supabase_config(url, key):
+    """Saves Supabase credentials into launcher_config.json."""
+    try:
+        cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+        cfg = {}
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8-sig") as f:
+                cfg = json.load(f)
+        cfg["supabase_url"] = str(url).strip().rstrip('/')
+        cfg["supabase_key"] = str(key).strip()
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def supabase_api_request(endpoint, method="GET", payload=None, extra_headers=None):
+    """Executes a HTTPS REST request against Supabase PostgREST API."""
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return None
+        
+    target = f"{sb_url}/rest/v1/{endpoint}"
+    body = json.dumps(payload).encode('utf-8') if payload is not None else None
+    headers = {
+        "apikey": sb_key,
+        "Authorization": f"Bearer {sb_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "Moon-Launcher-Cloud/1.0"
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+        
+    req = urllib.request.Request(target, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            raw = resp.read().decode('utf-8')
+            return json.loads(raw) if raw.strip() else {}
+    except Exception:
+        return None
+
+def cloud_update_presence(username=None):
+    """Pushes active player presence, modpack, and server address to Supabase cloud."""
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return False
+        
+    u_name = username or LAN_ACTIVE_USER or "Player"
+    v_dir = LAN_ACTIVE_VERSION_DIR
+    m = get_active_modpack_manifest(v_dir) if (v_dir and "get_active_modpack_manifest" in globals()) else None
+    v_name = m["version_name"] if m else (LAN_ACTIVE_VERSION_NAME or "Vanilla 1.20.1")
+    mc_ver = m["mc_version"] if m else "1.20.1"
+    loader = m["loader"] if m else "Forge"
+    m_cnt = m["mod_count"] if m else 0
+    
+    t_status = get_tunnel_status()
+    pub_addr = t_status.get("public_address") if t_status.get("running") else ""
+    is_hosting = bool(pub_addr)
+    status_str = "hosting" if is_hosting else "online"
+    
+    player_id = get_or_create_moon_id(u_name)
+    
+    # 1. Upsert public.players
+    payload_p = {
+        "player_id": player_id,
+        "username": u_name,
+        "tag": u_name[:3].upper() + "-" + player_id.replace("MOON-", ""),
+        "last_seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    supabase_api_request("players", method="POST", payload=payload_p, extra_headers={"Prefer": "resolution=merge-duplicates"})
+
+    # Clean up any stale presence records with the same player_id but previous username
+    try:
+        supabase_api_request(f'presence?player_id=eq.{player_id}&username=neq.{u_name}', method='DELETE')
+    except Exception:
+        pass
+
+    # 2. Upsert public.presence
+    payload_sb = {
+        "username": u_name,
+        "player_id": player_id,
+        "status": status_str,
+        "version_name": v_name,
+        "mc_version": mc_ver,
+        "loader": loader,
+        "mod_count": m_cnt,
+        "server_addr": pub_addr or "",
+        "tunnel_active": is_hosting,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    
+    res = supabase_api_request("presence", method="POST", payload=payload_sb, extra_headers={"Prefer": "resolution=merge-duplicates"})
+    return res is not None
+
+def cloud_get_friends_presence(usernames_or_ids):
+    """Fetches real-time status of given usernames or Moon IDs from Supabase presence table."""
+    if not usernames_or_ids:
+        return {}
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return {}
+        
+    names_quoted = ",".join(f'"{u}"' for u in usernames_or_ids)
+    endpoint = f"presence?or=(username.in.({urllib.parse.quote(names_quoted)}),player_id.in.({urllib.parse.quote(names_quoted)}))"
+    res = supabase_api_request(endpoint, method="GET")
+    
+    if isinstance(res, list):
+        now = time.time()
+        mapping = {}
+        with CLOUD_PEERS_LOCK:
+            for item in res:
+                uname = item.get("username")
+                p_id = item.get("player_id")
+                info = {
+                    "player_id": p_id,
+                    "username": uname,
+                    "status": item.get("status", "online"),
+                    "version_name": item.get("version_name", ""),
+                    "mc_version": item.get("mc_version", ""),
+                    "loader": item.get("loader", ""),
+                    "mod_count": item.get("mod_count", 0),
+                    "server_addr": item.get("server_addr", ""),
+                    "last_seen": now
+                }
+                if uname:
+                    CLOUD_PEERS[uname.lower()] = info
+                    mapping[uname.lower()] = info
+                if p_id:
+                    CLOUD_PEERS[p_id.lower()] = info
+                    mapping[p_id.lower()] = info
+        return mapping
+    return {}
+
+def _cloud_presence_loop():
+    """Background loop that periodically refreshes player presence and friends status."""
+    global CLOUD_SYNC_RUNNING
+    while CLOUD_SYNC_RUNNING:
+        try:
+            cloud_update_presence()
+            d = load_network_data()
+            f_ids = [f.get("player_id") or f.get("username") for f in d.get("friends", []) if isinstance(f, dict)]
+            if f_ids:
+                cloud_get_friends_presence(f_ids)
+        except Exception:
+            pass
+        time.sleep(25.0)
+
+def start_cloud_presence_service(username=None):
+    """Starts the background Supabase cloud presence service."""
+    global CLOUD_SYNC_RUNNING
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return False
+        
+    if CLOUD_SYNC_RUNNING:
+        return True
+        
+    CLOUD_SYNC_RUNNING = True
+    t = threading.Thread(target=_cloud_presence_loop, daemon=True, name="MoonCloudPresence")
+    t.start()
+    return True
+
+def handle_cloud_command(args=None):
+    """CLI handler for /cloud commands to configure or check Supabase cloud status."""
+    box_w = 68
+    url, key = get_supabase_config()
+    sub = args[0].lower() if args else "status"
+
+    if sub in ("setup", "config", "set"):
+        print(f"\n{C_WHITE}\033[1mMoon Launcher Cloud Setup (Supabase)\033[0m")
+        print(f"{C_MUTED}Enter your Supabase Project URL and Anon Public Key from supabase.com:{CLR_RESET}\n")
+        try:
+            new_url = input(f"{C_CYAN}Supabase Project URL (e.g. https://xyz.supabase.co): {CLR_RESET}").strip()
+            new_key = input(f"{C_CYAN}Supabase Anon Public Key (eyJh...): {CLR_RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            print()
             return
-        target = args[1].lower()
-        note_txt = " ".join(args[2:])
-        matched = next((f for f in friends if f.get("username", "").lower() == target), None)
-        if matched:
-            matched["note"] = note_txt
-            save_network_data(data)
-            print(f"\n{C_GREEN}[OK] Note updated for '{matched['username']}': {note_txt}{CLR_RESET}\n")
+        if new_url and new_key:
+            if set_supabase_config(new_url, new_key):
+                start_cloud_presence_service()
+                print(f"\n{C_GREEN}[OK] Supabase Cloud configured successfully!{CLR_RESET}\n")
+            else:
+                print(f"\n{C_RED}[Error] Failed to save cloud configuration.{CLR_RESET}\n")
         else:
-            print(f"\n{C_AMBER}Friend '{args[1]}' not found in contacts.{CLR_RESET}\n")
+            print(f"\n{C_AMBER}Setup cancelled. Both URL and Key are required.{CLR_RESET}\n")
+        return
+
+    # Status
+    lines = [
+        f"{C_WHITE}\033[1mMoon Cloud Presence & Global Friends Status\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+    ]
+    if url and key:
+        masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_GREEN}CONNECTED (Supabase REST & Realtime){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Project URL    :{CLR_RESET} {C_CYAN}{url}{CLR_RESET}")
+        lines.append(f"  {C_WHITE}* API Key        :{CLR_RESET} {C_MUTED}{masked_key}{CLR_RESET}")
+        with CLOUD_PEERS_LOCK:
+            online_cnt = len(CLOUD_PEERS)
+        lines.append(f"  {C_WHITE}* Global Peers   :{CLR_RESET} {C_GREEN}{online_cnt} players tracked online{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /cloud setup (Reconfigure) • /friend list (View Friends){CLR_RESET}")
     else:
-        print(f"\n{C_RED}Unknown friend command. Available: list, invite, add, remove, ping, note{CLR_RESET}\n")
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_AMBER}NOT CONFIGURED (Running local LAN mode){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Description    :{CLR_RESET} {C_MUTED}Connect to Supabase to enable global friends & mabar without Radmin!{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_CYAN}To connect your free Supabase database:{CLR_RESET}")
+        lines.append(f"  Type: {C_GREEN}/cloud setup{CLR_RESET}")
 
-# ==============================================================================
-# COMMAND HANDLER: /host
-# ==============================================================================
+    print("\n" + render_box(lines, box_w, title="Cloud Hub") + "\n")
 
 def handle_host_command(args, active_version_dir=None):
     """
@@ -1057,12 +1519,15 @@ LAN_ACTIVE_VERSION_DIR = None
 LAN_PEERS_LOCK = threading.Lock()
 LAN_PEERS = {}  # {username: {'ip': str, 'port': int, 'hash': str, 'last_seen': float, 'synced': bool}}
 LAN_TRIGGER_EVENT = threading.Event()
+CLOUD_PEERS_LOCK = threading.Lock()
+CLOUD_PEERS = {}  # {username: {'status': str, 'version_name': str, 'server_addr': str, 'last_seen': float}}
+CLOUD_SYNC_RUNNING = False
 
 def get_broadcast_targets():
     """Detects local broadcast targets across WiFi, Ethernet, and virtual LANs (Radmin VPN, Tailscale, ZeroTier)."""
     targets = {'255.255.255.255'}
     try:
-        out = subprocess.check_output('ipconfig', text=True, encoding='cp437', errors='ignore')
+        out = subprocess.check_output('ipconfig', text=True, encoding='cp437', errors='ignore', creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
         ips = re.findall(r'IPv4 Address[^\:]*:\s*([0-9\.]+)', out)
         for ip in ips:
             parts = ip.split('.')
@@ -1134,6 +1599,115 @@ def distribute_peer_skin(peer_username, skin_bytes, version_dir=None):
         return True
     except Exception:
         return False
+
+
+def get_active_modpack_manifest(v_dir=None):
+    """Scans and generates a file manifest of the active modpack (mods and configs)."""
+    target = v_dir or LAN_ACTIVE_VERSION_DIR
+    if not target or not os.path.exists(target):
+        return None
+    v_name = os.path.basename(target)
+    mods_dir = os.path.join(target, "mods")
+    config_dir = os.path.join(target, "config")
+    
+    files = []
+    total_size = 0
+    if os.path.exists(mods_dir):
+        for f in sorted(os.listdir(mods_dir)):
+            if f.endswith('.jar'):
+                fp = os.path.join(mods_dir, f)
+                sz = os.path.getsize(fp)
+                files.append({"path": f"mods/{f}", "size": sz})
+                total_size += sz
+
+    if os.path.exists(config_dir):
+        for root, dirs, f_list in os.walk(config_dir):
+            for f in f_list:
+                fp = os.path.join(root, f)
+                rel = os.path.relpath(fp, target).replace("\\", "/")
+                sz = os.path.getsize(fp)
+                files.append({"path": rel, "size": sz})
+                total_size += sz
+
+    mc_ver = "1.20.1"
+    loader = "Forge"
+    cfg_file = os.path.join(target, "launcher_config.json")
+    if os.path.exists(cfg_file):
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as cf:
+                d = json.load(cf)
+                mc_ver = d.get("mc_version", mc_ver)
+                loader = d.get("loader", loader)
+        except Exception:
+            pass
+
+    return {
+        "version_name": v_name,
+        "mc_version": mc_ver,
+        "loader": loader,
+        "mod_count": len([i for i in files if i["path"].startswith("mods/")]),
+        "total_files": len(files),
+        "total_size": total_size,
+        "files": files
+    }
+
+def sync_modpack_from_peer(peer_ip, peer_port, versions_root=None):
+    """
+    Connects to peer P2P server, requests active modpack manifest,
+    and selectively downloads missing/updated mods and configs with a live progress bar.
+    """
+    v_root = versions_root or os.path.join(BASE_DIR, "versions")
+    base_url = f"http://{peer_ip}:{peer_port}"
+    
+    try:
+        req = urllib.request.Request(f"{base_url}/modpack/manifest", headers={"User-Agent": "Moon-Launcher/1.0"})
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            manifest = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"\n{C_RED}[Moon P2P] Could not reach friend's launcher on {base_url}: {e}{CLR_RESET}\n")
+        return None
+        
+    v_name = manifest.get("version_name")
+    if not v_name:
+        return None
+        
+    target_v_dir = os.path.join(v_root, v_name)
+    os.makedirs(target_v_dir, exist_ok=True)
+    
+    files = manifest.get("files", [])
+    to_download = []
+    download_bytes = 0
+    for item in files:
+        rel = item["path"]
+        sz = item["size"]
+        dest = os.path.join(target_v_dir, rel.replace("/", os.sep))
+        if not os.path.exists(dest) or os.path.getsize(dest) != sz:
+            to_download.append((rel, sz, dest))
+            download_bytes += sz
+            
+    print(f"\n{C_CYAN}[Moon P2P] Syncing custom modpack '{v_name}' ({len(to_download)} files to download, {download_bytes / (1024*1024):.1f} MB)...{CLR_RESET}")
+    
+    transferred = 0
+    t0 = time.time()
+    for idx, (rel, sz, dest) in enumerate(to_download, 1):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        f_url = f"{base_url}/modpack/file?path={urllib.parse.quote(rel)}"
+        req = urllib.request.Request(f_url, headers={"User-Agent": "Moon-Launcher/1.0"})
+        with urllib.request.urlopen(req, timeout=30.0) as resp:
+            with open(dest, "wb") as f_out:
+                while chunk := resp.read(65536):
+                    f_out.write(chunk)
+                    transferred += len(chunk)
+                    
+        pct = min(100, int((transferred / max(1, download_bytes)) * 100))
+        speed = (transferred / max(0.1, time.time() - t0)) / (1024 * 1024)
+        bar_len = 24
+        filled = int(bar_len * (pct / 100))
+        bar = "█" * filled + "░" * (bar_len - filled)
+        print(f"\r  [{C_GREEN}{bar}{CLR_RESET}] {pct}% ({transferred / (1024*1024):.1f}/{download_bytes / (1024*1024):.1f} MB, {speed:.1f} MB/s) {os.path.basename(rel)[:24]:<24}", end="", flush=True)
+        
+    print(f"\n{C_GREEN}[Moon P2P] Modpack '{v_name}' successfully synchronized!{CLR_RESET}\n")
+    return target_v_dir
 
 def _lan_tcp_server_loop():
     """Lightweight HTTP server serving local player skin to requesting peers."""
@@ -1292,14 +1866,22 @@ def start_lan_skin_service(username=None, version_dir=None):
     t_udp.start()
     LAN_TRIGGER_EVENT.set()
 
-def update_lan_skin_identity(username=None, version_dir=None):
+def update_lan_skin_identity(username=None, version_dir=None, version_name=None):
     """Updates the active user identity and profile version."""
-    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR
+    global LAN_ACTIVE_USER, LAN_ACTIVE_VERSION_DIR, LAN_ACTIVE_VERSION_NAME
     if username:
         LAN_ACTIVE_USER = username
     if version_dir:
         LAN_ACTIVE_VERSION_DIR = version_dir
+    if version_name:
+        LAN_ACTIVE_VERSION_NAME = version_name
+    elif version_dir and not LAN_ACTIVE_VERSION_NAME:
+        LAN_ACTIVE_VERSION_NAME = os.path.basename(version_dir)
     trigger_lan_skin_broadcast()
+
+def update_active_version(version_dir, version_name=None):
+    """Public hook to update active modpack context across P2P and LAN beacons."""
+    update_lan_skin_identity(None, version_dir, version_name)
 
 def trigger_lan_skin_broadcast():
     """Forces an immediate discovery probe across all LAN and Radmin networks."""

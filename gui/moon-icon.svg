@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
+  <!-- Neo-Brutalism Hard Shadow -->
+  <rect x="101" y="101" width="360" height="360" rx="86" fill="#161622" />
+  <!-- Card Background -->
+  <rect x="76" y="76" width="360" height="360" rx="86" fill="#9FA0FF" stroke="#161622" stroke-width="22" />
+  <!-- Crescent Moon Icon -->
+  <g transform="translate(156, 156) scale(8.33)">
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" stroke="#161622" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  </g>
+</svg>
