@@ -15,6 +15,8 @@ import threading
 import subprocess
 import urllib.request
 import urllib.parse
+import zipfile
+import io
 import base64
 if sys.platform == 'win32':
     import winreg
@@ -57,18 +59,33 @@ def get_visible_width(text):
     return len(strip_ansi(text))
 
 def render_box(lines, width=68, title=None):
+    content_lines = []
+    for l in lines:
+        s = strip_ansi(str(l)).strip()
+        is_div = len(s) > 0 and all(c in '─-=' for c in s)
+        if not is_div:
+            content_lines.append(l)
+
+    t_len = get_visible_width(f" {title} ") if title else 0
+    max_c_w = max([get_visible_width(l) for l in content_lines] + [t_len + 2, width - 4])
+    width = max(width, max_c_w + 4)
+
     top = f"{C_BORDER}╭{'─' * (width - 2)}╮{CLR_RESET}"
     bottom = f"{C_BORDER}╰{'─' * (width - 2)}╯{CLR_RESET}"
     out = [top]
     if title:
         v_title = f" {title} "
-        t_len = get_visible_width(v_title)
-        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 4 - t_len)}╮{CLR_RESET}"
+        out[0] = f"{C_BORDER}╭─{C_WHITE}\033[1m{v_title}{CLR_RESET}{C_BORDER}{'─' * max(0, width - 3 - t_len)}╮{CLR_RESET}"
 
     for l in lines:
-        v_w = get_visible_width(l)
-        pad = max(0, width - 4 - v_w)
-        out.append(f"{C_BORDER}│{CLR_RESET}  {l}{' ' * pad}{C_BORDER}│{CLR_RESET}")
+        s = strip_ansi(str(l)).strip()
+        if len(s) > 0 and all(c in '─-=' for c in s):
+            # Dynamic separator line matching exact box width with T-junctions
+            out.append(f"{C_BORDER}├{'─' * (width - 2)}┤{CLR_RESET}")
+        else:
+            v_w = get_visible_width(l)
+            pad = max(0, width - 4 - v_w)
+            out.append(f"{C_BORDER}│{CLR_RESET}  {l}{' ' * pad}{C_BORDER}│{CLR_RESET}")
     out.append(bottom)
     return "\n".join(out)
 
@@ -323,12 +340,30 @@ def add_friend_from_invite(invite, data=None):
 
     save_network_data(data)
 
+    # Attempt bidirectional mutual handshake to peer's Moon Launcher
+    peer_ip = None
+    peer_port = 25570
+    if addr and ":" in addr:
+        peer_ip = addr.split(":")[0]
+    with LAN_PEERS_LOCK:
+        for uname, p in LAN_PEERS.items():
+            if uname.lower() == u_name.lower():
+                peer_ip = p.get("ip")
+                peer_port = p.get("port", 25570)
+                break
+
+    handshake_result = send_mutual_handshake(peer_ip, peer_port, LAN_ACTIVE_USER, addr) if peer_ip else None
+
     box_w = 68
     lines = [
-        f"{C_GREEN}\033[1m[OK] Friend Added Successfully via Invite Link!\033[0m",
+        f"{C_GREEN}\033[1m[OK] Friend Added Successfully!\033[0m",
         f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
         f"  {C_WHITE}* Player Name     :{CLR_RESET} {C_CYAN}{u_name}{CLR_RESET}",
     ]
+    if handshake_result and handshake_result.get("status") == "ok":
+        lines.append(f"  {C_WHITE}* Mutual Friendship:{CLR_RESET} {C_GREEN}Confirmed! ({u_name} added you back){CLR_RESET}")
+    elif peer_ip:
+        lines.append(f"  {C_WHITE}* Mutual Handshake:{CLR_RESET} {C_MUTED}Dispatched to {peer_ip}:{peer_port}{CLR_RESET}")
     if addr:
         lines.append(f"  {C_WHITE}* Server Address  :{CLR_RESET} {C_WHITE}{addr}{CLR_RESET}")
         p_res = ping_minecraft_server(addr, timeout=2.0)
@@ -359,14 +394,7 @@ def add_friend_from_invite(invite, data=None):
 def load_network_data():
     if not os.path.exists(FRIENDS_FILE):
         default_data = {
-            "friends": [
-                {
-                    "username": "Michelle",
-                    "address": "",
-                    "note": "Primary Profile",
-                    "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                }
-            ],
+            "friends": [],
             "servers": [
                 {
                     "name": "Hypixel Network",
@@ -385,7 +413,13 @@ def load_network_data():
 
     try:
         with open(FRIENDS_FILE, "r", encoding="utf-8-sig") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "friends" in data:
+                cleaned = [f for f in data["friends"] if f.get("note") != "Primary Profile" and f.get("username", "").lower() not in ("michelle", "alex")]
+                if len(cleaned) != len(data["friends"]):
+                    data["friends"] = cleaned
+                    save_network_data(data)
+            return data
     except Exception:
         return {"friends": [], "servers": []}
 
@@ -674,6 +708,395 @@ def get_tunnel_status():
 # ==============================================================================
 # COMMAND HANDLER: /friend
 # ==============================================================================
+
+
+# ==============================================================================
+# MOON CLOUD & NEXT.JS CENTRAL API ENGINE
+# ==============================================================================
+
+DEFAULT_MOON_WEB_API = "http://localhost:3000"
+
+def get_moon_web_api():
+    """Retrieves configured Moon Web API URL, defaulting to local/cloud central endpoint."""
+    url = os.environ.get("MOON_WEB_API", "")
+    if not url:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    url = d.get("moon_web_api", "")
+        except Exception:
+            pass
+    return (url or DEFAULT_MOON_WEB_API).strip().rstrip('/')
+
+def get_supabase_config():
+    """Retrieves configured Supabase URL and Anon Key from launcher config or environment."""
+    url = os.environ.get("MOON_SUPABASE_URL", "")
+    key = os.environ.get("MOON_SUPABASE_KEY", "")
+    
+    if not url or not key:
+        try:
+            cfg_path = os.path.join(BASE_DIR, "launcher_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                    url = url or d.get("supabase_url", "")
+                    key = key or d.get("supabase_key", "")
+        except Exception:
+            pass
+            
+    return url.strip().rstrip('/'), key.strip()
+
+def set_supabase_config(url, key):
+    """Saves Supabase credentials into launcher_config.json."""
+    try:
+        import launcher
+        cfg = launcher.load_config()
+        cfg["supabase_url"] = str(url).strip().rstrip('/')
+        cfg["supabase_key"] = str(key).strip()
+        launcher.save_config(cfg)
+        return True
+    except Exception:
+        return False
+
+def supabase_api_request(endpoint, method="GET", payload=None, extra_headers=None):
+    """Executes a HTTPS REST request against Supabase PostgREST API."""
+    sb_url, sb_key = get_supabase_config()
+    if not sb_url or not sb_key:
+        return None
+        
+    target = f"{sb_url}/rest/v1/{endpoint}"
+    body = json.dumps(payload).encode('utf-8') if payload is not None else None
+    headers = {
+        "apikey": sb_key,
+        "Authorization": f"Bearer {sb_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "Moon-Launcher-Cloud/1.0"
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+        
+    req = urllib.request.Request(target, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            raw = resp.read().decode('utf-8')
+            return json.loads(raw) if raw.strip() else {}
+    except Exception:
+        return None
+
+def cloud_update_presence(username=None):
+    """
+    Pushes active player presence, modpack, and server address to:
+    1. Next.js Moon Web API (Central Heartbeat)
+    2. Supabase Cloud (if direct credentials are configured)
+    """
+    u_name = username or LAN_ACTIVE_USER or "Player"
+    v_dir = LAN_ACTIVE_VERSION_DIR
+    m = get_active_modpack_manifest(v_dir) if v_dir else None
+    v_name = m["version_name"] if m else (LAN_ACTIVE_VERSION_NAME or "Vanilla")
+    mc_ver = m["mc_version"] if m else "1.20.1"
+    loader = m["loader"] if m else "Forge"
+    m_cnt = m["mod_count"] if m else 0
+    
+    t_status = get_tunnel_status()
+    pub_addr = t_status.get("public_address") if t_status.get("running") else ""
+    is_hosting = bool(pub_addr)
+    status_str = "in_game" if is_hosting else "online"
+    
+    player_id = f"MOON-{abs(hash(u_name)) % 9000 + 1000}"
+    
+    # 1. Update Next.js Moon Web API
+    web_api = get_moon_web_api()
+    if web_api:
+        try:
+            target = f"{web_api}/api/presence/heartbeat"
+            payload = {
+                "player_id": player_id,
+                "username": u_name,
+                "display_name": u_name,
+                "status": status_str,
+                "current_server": pub_addr or "",
+                "current_modpack": v_name
+            }
+            body = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                target,
+                data=body,
+                headers={"Content-Type": "application/json", "User-Agent": "Moon-Launcher/2.4.5"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                pass
+        except Exception:
+            pass
+
+    # 2. Update Supabase if configured
+    sb_url, sb_key = get_supabase_config()
+    if sb_url and sb_key:
+        payload_sb = {
+            "username": u_name,
+            "player_id": u_name.lower().replace(" ", "_"),
+            "status": status_str,
+            "version_name": v_name,
+            "mc_version": mc_ver,
+            "loader": loader,
+            "mod_count": m_cnt,
+            "server_addr": pub_addr or "",
+            "tunnel_active": is_hosting,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        supabase_api_request("presence", method="POST", payload=payload_sb, extra_headers={"Prefer": "resolution=merge-duplicates"})
+    
+    return True
+
+def cloud_get_friends_presence(usernames_list):
+    """Fetches real-time status of given usernames from Next.js Web API and Supabase."""
+    if not usernames_list:
+        return {}
+        
+    mapping = {}
+    
+    # 1. Query Next.js Moon Web API
+    web_api = get_moon_web_api()
+    if web_api:
+        try:
+            query_str = urllib.parse.quote(",".join(usernames_list))
+            target = f"{web_api}/api/presence/friends?friends={query_str}"
+            req = urllib.request.Request(target, headers={"User-Agent": "Moon-Launcher/2.4.5"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                friends_res = data.get("friends", [])
+                with CLOUD_PEERS_LOCK:
+                    for item in friends_res:
+                        uname = item.get("username", "")
+                        if uname:
+                            info = {
+                                "username": uname,
+                                "player_id": item.get("player_id", ""),
+                                "status": item.get("status", "offline"),
+                                "version_name": item.get("current_modpack", ""),
+                                "server_addr": item.get("current_server", ""),
+                                "skin_url": item.get("skin_url", ""),
+                                "last_seen": item.get("last_seen", "")
+                            }
+                            CLOUD_PEERS[uname.lower()] = info
+                            mapping[uname.lower()] = info
+        except Exception:
+            pass
+            
+    # 2. Also query Supabase if configured
+    sb_url, sb_key = get_supabase_config()
+    if sb_url and sb_key:
+        try:
+            names_quoted = ",".join(f'"{u}"' for u in usernames_list)
+            endpoint = f"presence?username=in.({urllib.parse.quote(names_quoted)})"
+            res = supabase_api_request(endpoint, method="GET")
+            if isinstance(res, list):
+                with CLOUD_PEERS_LOCK:
+                    for item in res:
+                        uname = item.get("username")
+                        if uname:
+                            info = {
+                                "username": uname,
+                                "status": item.get("status", "online"),
+                                "version_name": item.get("version_name", ""),
+                                "mc_version": item.get("mc_version", ""),
+                                "loader": item.get("loader", ""),
+                                "mod_count": item.get("mod_count", 0),
+                                "server_addr": item.get("server_addr", ""),
+                                "tunnel_active": item.get("tunnel_active", False),
+                                "updated_at": item.get("updated_at", "")
+                            }
+                            CLOUD_PEERS[uname.lower()] = info
+                            mapping[uname.lower()] = info
+        except Exception:
+            pass
+            
+    return mapping
+
+def cloud_lookup_player(player_id_or_name):
+    """Looks up player information by Player ID or Username from Next.js API or Supabase."""
+    clean = str(player_id_or_name).strip().lstrip('@')
+    if not clean:
+        return None
+        
+    # Check cache first
+    with CLOUD_PEERS_LOCK:
+        if clean.lower() in CLOUD_PEERS:
+            return CLOUD_PEERS[clean.lower()]
+            
+    # Query Next.js API
+    web_api = get_moon_web_api()
+    if web_api:
+        try:
+            target = f"{web_api}/api/player/{urllib.parse.quote(clean)}"
+            req = urllib.request.Request(target, headers={"User-Agent": "Moon-Launcher/2.4.5"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                profile = json.loads(resp.read().decode('utf-8'))
+                if profile and "username" in profile:
+                    pres = profile.get("presence", {})
+                    info = {
+                        "player_id": profile.get("id", ""),
+                        "username": profile.get("username", clean),
+                        "display_name": profile.get("display_name", clean),
+                        "status": pres.get("status", "offline"),
+                        "version_name": pres.get("current_modpack", ""),
+                        "server_addr": pres.get("current_server", ""),
+                        "badges": profile.get("badges", [])
+                    }
+                    with CLOUD_PEERS_LOCK:
+                        CLOUD_PEERS[clean.lower()] = info
+                        CLOUD_PEERS[profile["username"].lower()] = info
+                    return info
+        except Exception:
+            pass
+            
+    return None
+
+
+def show_player_profile_card(player_id, active_version_dir=None):
+    """
+    Renders an interactive Player Profile Card for the specified player ID or username,
+    with 1-click Join, Sync, and Add Friend actions.
+    """
+    if not player_id:
+        return
+    clean_id = str(player_id).strip().strip('"').strip("'").lstrip('@')
+    tag = clean_id[:3].upper() + "-" + str(abs(hash(clean_id)) % 9000 + 1000)
+    
+    # 1. Lookup in contacts (friends.json)
+    data = load_network_data()
+    friends = data.get("friends", [])
+    matched_friend = next((f for f in friends if f.get("username", "").lower() == clean_id.lower()), None)
+    
+    # 2. Lookup in LAN & Radmin peers (LAN_PEERS) or Cloud Presence (Supabase)
+    peer_meta = None
+    with LAN_PEERS_LOCK:
+        peer_meta = next((p for uname, p in LAN_PEERS.items() if uname.lower() == clean_id.lower()), None)
+
+    if not peer_meta:
+        with CLOUD_PEERS_LOCK:
+            peer_meta = CLOUD_PEERS.get(clean_id.lower())
+    if not peer_meta:
+        peer_meta = cloud_lookup_player(clean_id)
+        
+    display_name = (matched_friend.get("username") if matched_friend else None) or (peer_meta.get("username") if peer_meta else None) or clean_id
+    v_name = (peer_meta.get("version_name") if peer_meta else None) or "Unknown Modpack"
+    m_cnt = peer_meta.get("mod_count", 0) if peer_meta else 0
+    srv_target = (peer_meta.get("server_addr") if peer_meta else None) or (matched_friend.get("address") if matched_friend else None) or ""
+
+    # Determine Live Status
+    if peer_meta and peer_meta.get("server_addr"):
+        status_str = f"{C_GREEN}[PLAYING]{CLR_RESET} Hosting world online"
+    elif peer_meta:
+        status_str = f"{C_GREEN}[ONLINE ]{CLR_RESET} Active in Moon Launcher"
+    elif srv_target:
+        p_res = ping_minecraft_server(srv_target, timeout=1.5)
+        if p_res["online"]:
+            status_str = f"{C_GREEN}[ONLINE ]{CLR_RESET} Server online ({p_res['latency']}ms)"
+        else:
+            status_str = f"{C_RED}[IDLE   ]{CLR_RESET} Server offline or host world closed"
+    else:
+        status_str = f"{C_MUTED}[OFFLINE]{CLR_RESET} No active session detected"
+
+    # Determine Relationship
+    if matched_friend:
+        rel_str = f"{C_GREEN}Mutual Friend (In contacts){CLR_RESET}"
+    else:
+        rel_str = f"{C_CYAN}New Player (Not in contacts yet){CLR_RESET}"
+
+    box_w = 68
+    lines = [
+        f"{C_WHITE}\033[1mPlayer Profile & Session Overview\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}* Player Identity :{CLR_RESET} {C_CYAN}\033[1m{display_name}\033[0m {C_MUTED}(#{tag}){CLR_RESET}",
+        f"  {C_WHITE}* Status          :{CLR_RESET} {status_str}",
+        f"  {C_WHITE}* Active Modpack  :{CLR_RESET} {C_WHITE}\033[1m{v_name}\033[0m {C_AMBER}({m_cnt} mods){CLR_RESET}",
+    ]
+    if srv_target:
+        lines.append(f"  {C_WHITE}* Game Server     :{CLR_RESET} {C_GREEN}{srv_target}{CLR_RESET}")
+    else:
+        lines.append(f"  {C_WHITE}* Game Server     :{CLR_RESET} {C_MUTED}None (Host hasn't opened /host){CLR_RESET}")
+    lines.extend([
+        f"  {C_WHITE}* Relationship    :{CLR_RESET} {rel_str}",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}",
+        f"  {C_WHITE}\033[1mQuick Actions:\033[0m",
+        f"  {C_CYAN}[1]{CLR_RESET} {C_WHITE}Join Game{CLR_RESET}    {C_MUTED}(Launch Minecraft & auto-connect to world){CLR_RESET}",
+        f"  {C_CYAN}[2]{CLR_RESET} {C_WHITE}Sync Modpack{CLR_RESET} {C_MUTED}(Install/Update {v_name} via P2P){CLR_RESET}",
+        f"  {C_CYAN}[3]{CLR_RESET} {C_WHITE}Add Friend{CLR_RESET}   {C_MUTED}(Add to contacts & send mutual handshake){CLR_RESET}",
+        f"  {C_MUTED}[0] Close Profile Card{CLR_RESET}",
+    ])
+
+    print("\n" + render_box(lines, box_w, title=f"Player: {display_name}") + "\n")
+
+    try:
+        act = input(f"{C_WHITE}Select action [1/2/3/0]: {CLR_RESET}").strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return
+
+    if act == '1':
+        handle_friend_command(['join', display_name], active_version_dir)
+    elif act == '2':
+        handle_friend_command(['sync', display_name], active_version_dir)
+    elif act == '3':
+        handle_friend_command(['add', display_name], active_version_dir)
+    else:
+        print(f"{C_MUTED}Closed profile card.{CLR_RESET}\n")
+
+def handle_moon_protocol_url(url, active_version_dir=None):
+    """
+    Dispatcher for moon:// Windows protocol handler and web deep links:
+    - moon://player/<id> or moon://profile/<id> or moon://u/<id> -> show_player_profile_card
+    - moon://join/<name> -> handle_friend_command(['join', name])
+    - moon://install/<modpack_slug> -> launcher installer
+    - moon://friend/add?... or moon://invite/... -> handle_friend_command(['add', url])
+    """
+    if not url:
+        return
+    raw = str(url).strip().strip('"').strip("'")
+    parsed = urllib.parse.urlparse(raw)
+    
+    netloc = parsed.netloc.lower()
+    path = parsed.path.strip('/')
+    
+    # 1. Player Profile URL
+    if netloc in ('player', 'profile', 'u') or path.startswith(('player/', 'profile/', 'p/', 'u/')):
+        target_id = path.split('/')[-1] if '/' in path else (path or netloc)
+        if target_id in ('player', 'profile', 'u'):
+            target_id = path.split('/')[-1] if '/' in path else ""
+        if not target_id and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_id = qs.get('id', qs.get('user', ['']))[0]
+        if target_id:
+            show_player_profile_card(target_id, active_version_dir)
+            return
+
+    # 2. Direct Join URL
+    if netloc in ('join', 'mabar') or (netloc == 'friend' and 'join' in path):
+        target_name = path.split('/')[-1] if '/' in path and path != 'join' else ""
+        if not target_name and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_name = qs.get('user', qs.get('name', ['']))[0]
+        if target_name:
+            handle_friend_command(['join', target_name], active_version_dir)
+            return
+
+    # 3. Modpack Install URL
+    if netloc in ('install', 'modpack', 'pack') or path.startswith(('install/', 'modpack/')):
+        pack_slug = path.split('/')[-1] if '/' in path else path
+        if not pack_slug and parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            pack_slug = qs.get('id', qs.get('slug', ['']))[0]
+        if pack_slug:
+            import launcher
+            cfg = launcher.load_config(active_version_dir)
+            launcher.handle_install_command(['install', pack_slug], active_version_dir, cfg)
+            return
+
+    # 4. Fallback to friend invite / link
+    handle_friend_command(['add', raw], active_version_dir)
 
 def handle_friend_command(args, active_version_dir=None):
     """
@@ -1311,6 +1734,55 @@ def handle_cloud_command(args=None):
 
     print("\n" + render_box(lines, box_w, title="Cloud Hub") + "\n")
 
+def handle_cloud_command(args=None):
+    """CLI handler for /cloud commands to configure or check Supabase cloud status."""
+    box_w = 68
+    url, key = get_supabase_config()
+    sub = args[0].lower() if args else "status"
+
+    if sub in ("setup", "config", "set"):
+        print(f"\n{C_WHITE}\033[1mMoon Launcher Cloud Setup (Supabase)\033[0m")
+        print(f"{C_MUTED}Enter your Supabase Project URL and Anon Public Key from supabase.com:{CLR_RESET}\n")
+        try:
+            new_url = input(f"{C_CYAN}Supabase Project URL (e.g. https://xyz.supabase.co): {CLR_RESET}").strip()
+            new_key = input(f"{C_CYAN}Supabase Anon Public Key (eyJh...): {CLR_RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return
+        if new_url and new_key:
+            if set_supabase_config(new_url, new_key):
+                start_cloud_presence_service()
+                print(f"\n{C_GREEN}[OK] Supabase Cloud configured successfully!{CLR_RESET}\n")
+            else:
+                print(f"\n{C_RED}[Error] Failed to save cloud configuration.{CLR_RESET}\n")
+        else:
+            print(f"\n{C_AMBER}Setup cancelled. Both URL and Key are required.{CLR_RESET}\n")
+        return
+
+    # Status
+    lines = [
+        f"{C_WHITE}\033[1mMoon Cloud Presence & Global Friends Status\033[0m",
+        f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}"
+    ]
+    if url and key:
+        masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_GREEN}CONNECTED (Supabase REST & Realtime){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Project URL    :{CLR_RESET} {C_CYAN}{url}{CLR_RESET}")
+        lines.append(f"  {C_WHITE}* API Key        :{CLR_RESET} {C_MUTED}{masked_key}{CLR_RESET}")
+        with CLOUD_PEERS_LOCK:
+            online_cnt = len(CLOUD_PEERS)
+        lines.append(f"  {C_WHITE}* Global Peers   :{CLR_RESET} {C_GREEN}{online_cnt} players tracked online{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_MUTED}Commands: /cloud setup (Reconfigure) • /friend list (View Friends){CLR_RESET}")
+    else:
+        lines.append(f"  {C_WHITE}* Cloud Service  :{CLR_RESET} {C_AMBER}NOT CONFIGURED (Running local LAN mode){CLR_RESET}")
+        lines.append(f"  {C_WHITE}* Description    :{CLR_RESET} {C_MUTED}Connect to Supabase to enable global friends & mabar without Radmin!{CLR_RESET}")
+        lines.append(f"{C_BORDER}{'─' * (box_w - 4)}{CLR_RESET}")
+        lines.append(f"{C_CYAN}To connect your free Supabase database:{CLR_RESET}")
+        lines.append(f"  Type: {C_GREEN}/cloud setup{CLR_RESET}")
+
+    print("\n" + render_box(lines, box_w, title="Cloud Hub") + "\n")
+
 def handle_host_command(args, active_version_dir=None):
     """
     Handles /host commands:
@@ -1516,6 +1988,7 @@ LAN_TCP_SOCKET = None
 LAN_UDP_SOCKET = None
 LAN_ACTIVE_USER = None
 LAN_ACTIVE_VERSION_DIR = None
+LAN_ACTIVE_VERSION_NAME = None
 LAN_PEERS_LOCK = threading.Lock()
 LAN_PEERS = {}  # {username: {'ip': str, 'port': int, 'hash': str, 'last_seen': float, 'synced': bool}}
 LAN_TRIGGER_EVENT = threading.Event()
@@ -1710,30 +2183,149 @@ def sync_modpack_from_peer(peer_ip, peer_port, versions_root=None):
     return target_v_dir
 
 def _lan_tcp_server_loop():
-    """Lightweight HTTP server serving local player skin to requesting peers."""
+    """Lightweight HTTP server serving player skins and P2P modpack sync to peers."""
     global LAN_TCP_SOCKET, LAN_TCP_PORT, LAN_SYNC_RUNNING
     while LAN_SYNC_RUNNING and LAN_TCP_SOCKET:
         try:
             conn, addr = LAN_TCP_SOCKET.accept()
-            req = conn.recv(1024).decode('utf-8', errors='ignore')
+            req = conn.recv(2048).decode('utf-8', errors='ignore')
             lines = req.splitlines()
             if lines and lines[0].startswith("GET"):
                 path = lines[0].split()[1] if len(lines[0].split()) > 1 else ""
-                target_user = LAN_ACTIVE_USER
+                
                 if path.startswith("/skin/"):
+                    target_user = LAN_ACTIVE_USER
                     req_u = path.split("/skin/")[1].strip()
                     if req_u and req_u != "raw":
                         target_user = req_u.replace(".png", "")
-                
-                skin_data, _ = get_local_skin_payload(target_user)
-                if skin_data:
-                    resp = (
-                        b"HTTP/1.1 200 OK\r\n"
-                        b"Content-Type: image/png\r\n"
-                        b"Content-Length: " + str(len(skin_data)).encode() + b"\r\n"
-                        b"Connection: close\r\n\r\n" + skin_data
-                    )
-                    conn.sendall(resp)
+                    skin_data, _ = get_local_skin_payload(target_user)
+                    if skin_data:
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: image/png\r\n"
+                            b"Content-Length: " + str(len(skin_data)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + skin_data
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path.startswith("/friend/handshake"):
+                    # Mutual Handshake Endpoint: Automatically register reciprocal friendship
+                    parsed_q = urllib.parse.urlparse(path)
+                    qs = urllib.parse.parse_qs(parsed_q.query)
+                    h_user = qs.get("user", [""])[0].strip()
+                    h_addr = qs.get("addr", [""])[0].strip()
+                    
+                    if h_user and h_user.lower() != (LAN_ACTIVE_USER or "").lower():
+                        n_data = load_network_data()
+                        n_friends = n_data.setdefault("friends", [])
+                        matched_f = next((f for f in n_friends if f.get("username", "").lower() == h_user.lower()), None)
+                        if matched_f:
+                            if h_addr: matched_f["address"] = h_addr
+                        else:
+                            n_friends.append({
+                                "username": h_user,
+                                "address": h_addr,
+                                "note": "Mutual Friend (Handshake)",
+                                "added_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                        save_network_data(n_data)
+                        print(f"\n{C_GREEN}\033[1m[!] Mutual Friend Handshake:{CLR_RESET} {C_CYAN}{h_user}{CLR_RESET} {C_GREEN}added you as a friend!\033[0m\n", end="", flush=True)
+
+                    hs_res = json.dumps({"status": "ok", "user": LAN_ACTIVE_USER}).encode("utf-8")
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(hs_res)).encode() + b"\r\nConnection: close\r\n\r\n" + hs_res)
+
+                elif path.startswith("/modpack/bundle_dir?dir="):
+                    rel_dir = urllib.parse.unquote(path.split("dir=", 1)[1].strip())
+                    if LAN_ACTIVE_VERSION_DIR:
+                        safe_rel = os.path.normpath(rel_dir).lstrip(r"\/")
+                        target_dir = os.path.join(LAN_ACTIVE_VERSION_DIR, safe_rel)
+                        if os.path.commonpath([LAN_ACTIVE_VERSION_DIR, target_dir]) == LAN_ACTIVE_VERSION_DIR and os.path.isdir(target_dir):
+                            buf = io.BytesIO()
+                            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+                                for root, _, files in os.walk(target_dir):
+                                    for file in files:
+                                        full = os.path.join(root, file)
+                                        rel = os.path.relpath(full, target_dir).replace("\\", "/")
+                                        zf.write(full, rel)
+                            b_bytes = buf.getvalue()
+                            hdr = f"HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\nContent-Length: {len(b_bytes)}\r\nConnection: close\r\n\r\n".encode()
+                            conn.sendall(hdr + b_bytes)
+                        else:
+                            conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+
+                elif path == "/modpack/core_bundle":
+                    target = LAN_ACTIVE_VERSION_DIR
+                    if target and os.path.exists(target):
+                        v_name = resolve_clean_modpack_name(target, LAN_ACTIVE_VERSION_NAME)
+                        bundle_bytes = generate_core_bundle_bytes(target, v_name)
+                        hdr = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/zip\r\n"
+                            b"Content-Disposition: attachment; filename=core_bundle.zip\r\n"
+                            b"Content-Length: " + str(len(bundle_bytes)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n"
+                        )
+                        conn.sendall(hdr + bundle_bytes)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+
+                elif path == "/modpack/info":
+                    m = get_active_modpack_manifest()
+                    if m:
+                        t_status = get_tunnel_status()
+                        pub_addr = t_status.get("public_address") if t_status.get("running") else None
+                        active_port = detect_active_minecraft_port(LAN_ACTIVE_VERSION_DIR)
+                        info_body = json.dumps({
+                            "status": "ok",
+                            "user": LAN_ACTIVE_USER,
+                            "version_name": m["version_name"],
+                            "mc_version": m["mc_version"],
+                            "loader": m["loader"],
+                            "mod_count": m["mod_count"],
+                            "total_size": m["total_size"],
+                            "server_addr": pub_addr or (f"{addr[0]}:{active_port}" if active_port else "")
+                        }).encode('utf-8')
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/json\r\n"
+                            b"Content-Length: " + str(len(info_body)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + info_body
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path == "/modpack/manifest":
+                    m = get_active_modpack_manifest()
+                    if m:
+                        body = json.dumps(m).encode('utf-8')
+                        resp = (
+                            b"HTTP/1.1 200 OK\r\n"
+                            b"Content-Type: application/json\r\n"
+                            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                            b"Connection: close\r\n\r\n" + body
+                        )
+                        conn.sendall(resp)
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                elif path.startswith("/modpack/file?path="):
+                    rel = urllib.parse.unquote(path.split("path=", 1)[1].strip())
+                    if LAN_ACTIVE_VERSION_DIR:
+                        safe_rel = os.path.normpath(rel).lstrip(r"\/")
+                        target_file = os.path.join(LAN_ACTIVE_VERSION_DIR, safe_rel)
+                        if os.path.commonpath([LAN_ACTIVE_VERSION_DIR, target_file]) == LAN_ACTIVE_VERSION_DIR and os.path.isfile(target_file):
+                            sz = os.path.getsize(target_file)
+                            hdr = f"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {sz}\r\nConnection: close\r\n\r\n".encode()
+                            conn.sendall(hdr)
+                            with open(target_file, "rb") as f_in:
+                                while chunk := f_in.read(65536):
+                                    conn.sendall(chunk)
+                        else:
+                            conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+                    else:
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
                 else:
                     conn.sendall(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
             conn.close()
@@ -1754,11 +2346,20 @@ def _lan_udp_loop():
             last_broadcast = now
             _, my_hash = get_local_skin_payload(LAN_ACTIVE_USER)
             if LAN_ACTIVE_USER and LAN_TCP_PORT:
+                m_info = get_active_modpack_manifest()
+                t_status = get_tunnel_status()
+                pub_addr = t_status.get("public_address") if t_status.get("running") else None
+                active_port = detect_active_minecraft_port(LAN_ACTIVE_VERSION_DIR)
                 payload = json.dumps({
                     "magic": "MOON_SKIN_V1",
                     "user": LAN_ACTIVE_USER,
                     "hash": my_hash or "",
-                    "port": LAN_TCP_PORT
+                    "port": LAN_TCP_PORT,
+                    "version_name": m_info["version_name"] if m_info else "",
+                    "mc_version": m_info["mc_version"] if m_info else "",
+                    "loader": m_info["loader"] if m_info else "",
+                    "mod_count": m_info["mod_count"] if m_info else 0,
+                    "server_addr": pub_addr or (f":{active_port}" if active_port else "")
                 }).encode('utf-8')
                 for b_target in get_broadcast_targets():
                     try:
@@ -1786,6 +2387,12 @@ def _lan_udp_loop():
                         peer_info["ip"] = remote_ip
                         peer_info["port"] = peer_tcp
                         peer_info["last_seen"] = now
+                        if "version_name" in msg:
+                            peer_info["version_name"] = str(msg.get("version_name", ""))
+                            peer_info["mc_version"] = str(msg.get("mc_version", ""))
+                            peer_info["loader"] = str(msg.get("loader", ""))
+                            peer_info["mod_count"] = int(msg.get("mod_count", 0))
+                            peer_info["server_addr"] = str(msg.get("server_addr", ""))
 
                     _, local_hash = get_local_skin_payload(peer_user)
                     if peer_hash and (local_hash != peer_hash):
