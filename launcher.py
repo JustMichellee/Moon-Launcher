@@ -1,4 +1,4 @@
-﻿ACTIVE_GAME_PROC = None
+ACTIVE_GAME_PROC = None
 import network_hub
 import updater
 #!/usr/bin/env python3
@@ -333,9 +333,7 @@ def generate_discord_head_url(skin_file_path, username="Player"):
                     return res['image']['url']
         except Exception:
             pass
-    if username and username.strip():
-        return f"https://mc-heads.net/avatar/{username.strip()}.png"
-    return "https://mc-heads.net/avatar/steve.png"
+    return "https://minotar.net/bust/Steve/128.png"
 
 def upload_local_icon(file_path):
     """
@@ -507,18 +505,21 @@ class MoonDiscordRPC:
         # If already a valid head URL and not the raw unrolled texture
         if small and not any(k in small for k in ['novaskin.me', 'minotar.net/skin']):
             return small
-        # Check custom skin file
+        # Check active skin file
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        active_p = os.path.join(cur_dir, "skins", "active_skin.png")
+        if os.path.exists(active_p):
+            h_url = generate_discord_head_url(active_p, username)
+            if h_url:
+                cfg['discord_small_image'] = h_url
+                return h_url
         skin_p = cfg.get('custom_skin', '')
         if skin_p and os.path.exists(skin_p):
             h_url = generate_discord_head_url(skin_p, username)
             if h_url:
                 cfg['discord_small_image'] = h_url
                 return h_url
-        if username and username.lower() == 'epithap':
-            return 'https://files.catbox.moe/wdhyhz.png'
-        if username and username.strip():
-            return f"https://mc-heads.net/avatar/{username.strip()}.png"
-        return "https://mc-heads.net/avatar/steve.png"
+        return "https://minotar.net/bust/Steve/128.png"
 
     def _extract_world_name(self, world_folder):
         dat_path = os.path.join(world_folder, 'level.dat')
@@ -1264,6 +1265,82 @@ def get_best_java_for_version(mc_version, declared_java=None):
     for cand in (j17, j21, j8):
         if os.path.exists(cand): return cand
     return declared_java or "javaw.exe"
+
+def get_required_java_version(mc_version):
+    """
+    Returns required major Java version (8, 17, or 21) based on Minecraft version.
+    """
+    parts = [int(p) for p in re.findall(r'\d+', str(mc_version))]
+    major = parts[0] if len(parts) > 0 else 1
+    minor = parts[1] if len(parts) > 1 else 20
+    patch = parts[2] if len(parts) > 2 else 0
+
+    if major == 1 and minor <= 16:
+        return 8
+    elif (major == 1 and minor >= 21) or (major == 1 and minor == 20 and patch >= 5):
+        return 21
+    else:
+        return 17
+
+def get_java_recommendation(mc_version):
+    """
+    Provides official download recommendations (Adoptium Temurin) tailored to the required Java version.
+    """
+    req_v = get_required_java_version(mc_version)
+    names = {
+        8: "Eclipse Temurin 8 (LTS)",
+        17: "Eclipse Temurin 17 (LTS)",
+        21: "Eclipse Temurin 21 (LTS)"
+    }
+    web_urls = {
+        8: "https://adoptium.net/temurin/releases/?version=8",
+        17: "https://adoptium.net/temurin/releases/?version=17",
+        21: "https://adoptium.net/temurin/releases/?version=21"
+    }
+    direct_msi = {
+        8: "https://api.adoptium.net/v3/installer/latest/8/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk",
+        17: "https://api.adoptium.net/v3/installer/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk",
+        21: "https://api.adoptium.net/v3/installer/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk"
+    }
+    return {
+        "required_version": req_v,
+        "name": names.get(req_v, f"Java {req_v} (LTS)"),
+        "web_url": web_urls.get(req_v, f"https://adoptium.net/temurin/releases/?version={req_v}"),
+        "direct_msi": direct_msi.get(req_v, web_urls.get(req_v, "https://adoptium.net/temurin/releases/")),
+        "mc_version": str(mc_version),
+        "reason": f"Minecraft {mc_version} memerlukan {names.get(req_v, 'Java')} untuk dapat berjalan tanpa crash."
+    }
+
+def inspect_java_binary(java_path):
+    """
+    Inspects a javaw.exe / java.exe binary and returns (is_valid, major_version, full_version_str).
+    """
+    if not java_path:
+        return False, None, "Path kosong"
+
+    import shutil
+    target = java_path
+    if os.path.isdir(target):
+        target = os.path.join(target, "bin", "javaw.exe")
+    elif not os.path.isabs(target) and shutil.which(target):
+        target = shutil.which(target)
+
+    if not os.path.exists(target):
+        return False, None, f"File tidak ditemukan: {target}"
+
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        res = subprocess.run([target, "-version"], stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, timeout=5, creationflags=flags)
+        out = (res.stderr or "") + " " + (res.stdout or "")
+        match = re.search(r'version\s+"(\d+)(?:\.(\d+))?', out, re.IGNORECASE)
+        if match:
+            v1 = int(match.group(1))
+            v2 = int(match.group(2)) if match.group(2) else 0
+            major = v2 if v1 == 1 else v1
+            return True, major, out.strip().split("\n")[0]
+        return True, 17, "Java runtime terdeteksi"
+    except Exception as e:
+        return False, None, str(e)
 
 def ensure_natives_for_version(target_dir, mc_version):
     """Provisions correct LWJGL 2 or LWJGL 3 native DLLs into target_dir/natives."""
@@ -2205,25 +2282,45 @@ def set_global_username(new_user, active_version_dir=None):
                 except Exception:
                     pass
 
-    # 4. Replicate active skin for clean_user
+    # 4. Universally replicate active skin for clean_user across ALL version profiles and CSL paths
     skins_dir = os.path.join(cur_dir, "skins")
     active_skin = os.path.join(skins_dir, "active_skin.png")
-    csl_dir = os.path.expandvars(r"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins")
-    for s_folder in [skins_dir, csl_dir]:
-        if os.path.exists(s_folder):
-            try:
-                target_skin = os.path.join(s_folder, f"{clean_user}.png")
-                if os.path.exists(active_skin):
-                    import shutil
-                    shutil.copyfile(active_skin, target_skin)
-                elif not os.path.exists(target_skin):
-                    for old_cand in os.listdir(s_folder):
-                        if old_cand.endswith('.png') and not old_cand.startswith('.'):
-                            import shutil
-                            shutil.copyfile(os.path.join(s_folder, old_cand), target_skin)
-                            break
-            except Exception:
-                pass
+    
+    # Target folders to synchronize
+    csl_folders = [
+        skins_dir,
+        os.path.expandvars(r"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins"),
+        os.path.expandvars(r"%APPDATA%\.minecraft\LocalSkin\skins")
+    ]
+    if os.path.exists(vers_base):
+        for v_item in os.listdir(vers_base):
+            v_path = os.path.join(vers_base, v_item)
+            if os.path.isdir(v_path):
+                csl_folders.append(os.path.join(v_path, "CustomSkinLoader", "LocalSkin", "skins"))
+                csl_folders.append(os.path.join(v_path, "LocalSkin", "skins"))
+                csl_folders.append(os.path.join(v_path, "skins"))
+                
+                # Clear stale profile caches
+                pc_dir = os.path.join(v_path, "CustomSkinLoader", "ProfileCache")
+                if os.path.exists(pc_dir):
+                    try:
+                        for pcf in os.listdir(pc_dir):
+                            if clean_user.lower() in pcf.lower():
+                                os.remove(os.path.join(pc_dir, pcf))
+                    except Exception:
+                        pass
+
+    for s_folder in csl_folders:
+        try:
+            os.makedirs(s_folder, exist_ok=True)
+            target_user_skin = os.path.join(s_folder, f"{clean_user}.png")
+            target_act_skin = os.path.join(s_folder, "active_skin.png")
+            if os.path.exists(active_skin):
+                import shutil
+                shutil.copyfile(active_skin, target_user_skin)
+                shutil.copyfile(active_skin, target_act_skin)
+        except Exception:
+            pass
 
     return clean_user
 
@@ -4010,13 +4107,36 @@ def launch_game(version_dir, cfg):
     box_w = 66
     mc_ver, loader = detect_version_and_loader(version_dir)
     j_path = get_best_java_for_version(mc_ver, cfg.get('java_path'))
-    if not os.path.exists(j_path):
+
+    # Robust Java Verification & Recommendation
+    j_valid, j_major, j_detail = inspect_java_binary(j_path)
+    req_java = get_required_java_version(mc_ver)
+
+    if not j_valid or (j_major and j_major != req_java):
+        rec = get_java_recommendation(mc_ver)
+        curr_str = f"Java {j_major}" if j_major else "Tidak Ditemukan"
         err_lines = [
-            f"{C_RED}X Java Runtime not found at:{CLR_RESET}",
-            f"{C_MUTED}{j_path}{CLR_RESET}",
-            f"{C_AMBER}Please run /setting to adjust your java_path.{CLR_RESET}"
+            f"{C_RED}! JAVA RUNTIME TIDAK SESUAI ATAU BELUM TERPASANG !{CLR_RESET}",
+            f"{C_WHITE}Versi Minecraft : {mc_ver} (Memerlukan Java {req_java} LTS){CLR_RESET}",
+            f"{C_WHITE}Java Terdeteksi : {curr_str} ({j_path}){CLR_RESET}",
+            "",
+            f"{C_GREEN}Rekomendasi Resmi (Gratis & Stabil):{CLR_RESET}",
+            f"{C_CYAN}* {rec['name']}{CLR_RESET}",
+            f"  {rec['web_url']}",
+            f"{C_AMBER}Direct MSI Installer Link:{CLR_RESET}",
+            f"  {rec['direct_msi']}",
+            "",
+            f"{C_MUTED}Gunakan perintah '/setting java <path>' untuk memilih javaw.exe{CLR_RESET}"
         ]
         print("\n" + render_box(err_lines, box_w) + "\n")
+        try:
+            import webbrowser
+            if sys.stdin.isatty():
+                ans = input(f"{C_GREEN}Buka halaman download Adoptium Java di browser sekarang? [Y/n]: {CLR_RESET}").strip().lower()
+                if ans in ('', 'y', 'yes', 'ya'):
+                    webbrowser.open(rec['web_url'])
+        except Exception:
+            pass
         return False
 
     # Guarantee active skin is synchronized with current username in all CustomSkinLoader paths
@@ -4028,15 +4148,31 @@ def launch_game(version_dir, cfg):
             sync_targets = [
                 os.path.join(cur_d, "skins", f"{p_user}.png"),
                 os.path.join(version_dir, "skins", f"{p_user}.png"),
+                os.path.join(version_dir, "skins", "active_skin.png"),
                 os.path.join(version_dir, "CustomSkinLoader", "LocalSkin", "skins", f"{p_user}.png"),
+                os.path.join(version_dir, "CustomSkinLoader", "LocalSkin", "skins", "active_skin.png"),
                 os.path.join(version_dir, "LocalSkin", "skins", f"{p_user}.png"),
-                os.path.expandvars(rf"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins\{p_user}.png")
+                os.path.join(version_dir, "LocalSkin", "skins", "active_skin.png"),
+                os.path.expandvars(rf"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins\{p_user}.png"),
+                os.path.expandvars(rf"%APPDATA%\.minecraft\CustomSkinLoader\LocalSkin\skins\active_skin.png"),
+                os.path.expandvars(rf"%APPDATA%\.minecraft\LocalSkin\skins\{p_user}.png"),
+                os.path.expandvars(rf"%APPDATA%\.minecraft\LocalSkin\skins\active_skin.png")
             ]
             for st in sync_targets:
                 try:
                     os.makedirs(os.path.dirname(st), exist_ok=True)
                     import shutil
                     shutil.copyfile(act_s, st)
+                except Exception:
+                    pass
+
+            # Clear cached profile for this user so CustomSkinLoader loads the new texture
+            pc_dir = os.path.join(version_dir, "CustomSkinLoader", "ProfileCache")
+            if os.path.exists(pc_dir):
+                try:
+                    for pcf in os.listdir(pc_dir):
+                        if p_user.lower() in pcf.lower():
+                            os.remove(os.path.join(pc_dir, pcf))
                 except Exception:
                     pass
     except Exception:

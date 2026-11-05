@@ -712,8 +712,12 @@ async function launchGame(directServer = null) {
         isGameLaunching = false;
         isGameRunning = false;
         updateLaunchButtonState('idle');
-        const errMsg = res && res.error ? res.error : 'Failed to launch Minecraft';
-        showToast(errMsg, true);
+        if (res && res.java_missing) {
+          showJavaDownloadModal(res);
+        } else {
+          const errMsg = res && res.error ? res.error : 'Failed to launch Minecraft';
+          showToast(errMsg, true);
+        }
       }
     } catch (err) {
       isGameLaunching = false;
@@ -801,7 +805,7 @@ if (ramSlider && ramDisplay) {
 const btnSaveUser = document.getElementById('btn-save-username');
 const inUser = document.getElementById('input-quick-username');
 if (btnSaveUser && inUser) {
-  btnSaveUser.addEventListener('click', async () => {
+  const saveUserAction = async () => {
     const val = inUser.value.trim();
     if (!val) return;
     if (window.pywebview && window.pywebview.api) {
@@ -817,6 +821,10 @@ if (btnSaveUser && inUser) {
       const state = await window.pywebview.api.get_launcher_state();
       applyLauncherState(state);
     }
+  };
+  btnSaveUser.addEventListener('click', saveUserAction);
+  inUser.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveUserAction();
   });
 }
 
@@ -2228,4 +2236,89 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // ==========================================
+  // MODAL: JAVA RUNTIME DOWNLOAD & RECOMMENDATION
+  // ==========================================
+  const btnCloseJava = document.getElementById('btn-close-java-modal');
+  if (btnCloseJava) btnCloseJava.addEventListener('click', closeJavaDownloadModal);
+
+  const btnJavaDownloadMsi = document.getElementById('btn-java-download-msi');
+  if (btnJavaDownloadMsi) {
+    btnJavaDownloadMsi.addEventListener('click', async () => {
+      if (currentJavaRecommendation) {
+        const url = currentJavaRecommendation.direct_msi || currentJavaRecommendation.web_url;
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external_url) {
+          await window.pywebview.api.open_external_url(url);
+        } else {
+          window.open(url, '_blank');
+        }
+        showToast('Opening Java installer download...');
+      }
+    });
+  }
+
+  const btnJavaOpenWeb = document.getElementById('btn-java-open-web');
+  if (btnJavaOpenWeb) {
+    btnJavaOpenWeb.addEventListener('click', async () => {
+      const url = (currentJavaRecommendation && currentJavaRecommendation.web_url) || 'https://adoptium.net/temurin/releases/';
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external_url) {
+        await window.pywebview.api.open_external_url(url);
+      } else {
+        window.open(url, '_blank');
+      }
+      showToast('Opening Adoptium download page...');
+    });
+  }
+
+  const btnJavaChooseFile = document.getElementById('btn-java-choose-file');
+  if (btnJavaChooseFile) {
+    btnJavaChooseFile.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.choose_java_file) {
+        const res = await window.pywebview.api.choose_java_file();
+        if (res && res.success) {
+          showToast('Java path updated: ' + res.java_path);
+          closeJavaDownloadModal();
+          const state = await window.pywebview.api.get_launcher_state();
+          applyLauncherState(state);
+        } else if (res && res.error) {
+          showToast(res.error, true);
+        }
+      } else {
+        showToast('Custom Java selection is only available in desktop app');
+      }
+    });
+  }
 });
+
+// Java Modal Global Helpers
+let currentJavaRecommendation = null;
+
+function showJavaDownloadModal(data) {
+  currentJavaRecommendation = data || {};
+  const modal = document.getElementById('modal-java-download');
+  if (!modal) return;
+
+  const badge = document.getElementById('modal-java-badge');
+  const title = document.getElementById('modal-java-title');
+  const reason = document.getElementById('modal-java-reason');
+  const detail = document.getElementById('modal-java-detail');
+  const btnMsiText = document.getElementById('modal-java-btn-text');
+
+  const mcVer = data.mc_version || (appState && appState.active_version) || '1.20.1';
+  const reqJ = data.required_java || 17;
+  const jName = data.java_name || `Eclipse Temurin ${reqJ} LTS`;
+
+  if (badge) badge.innerText = `JAVA ${reqJ} REQUIRED`;
+  if (title) title.innerText = `${jName} Required`;
+  if (reason) reason.innerText = data.reason || `Minecraft ${mcVer} requires ${jName} to run.`;
+  if (detail) detail.innerText = data.error || `A compatible Java runtime was not found on your system. Download the official installer below.`;
+  if (btnMsiText) btnMsiText.innerText = `Download ${jName} (MSI Installer)`;
+
+  modal.classList.add('active');
+}
+
+function closeJavaDownloadModal() {
+  const modal = document.getElementById('modal-java-download');
+  if (modal) modal.classList.remove('active');
+}

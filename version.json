@@ -1,7 +1,7 @@
 {
-  "version": "2.5.0",
-  "commit_sha": "67d1f5a",
+  "version": "2.5.1",
+  "commit_sha": "HEAD",
   "branch": "main",
-  "updated_at": "2026-11-05 17:10:00",
-  "release_notes": "feat: live P2P & Public Anycast Modpack Sharing with short MOON-PACK-XXXX codes, Fabric 0.19.3 mixin fix, independent skin system, and solid green progress bar (#90EE90)"
+  "updated_at": "2026-11-05 19:50:00",
+  "release_notes": "feat: professional Windows Setup Installer (.exe) with custom path wizard, intelligent Java version detection & 1-click Adoptium Temurin download recommendation, 100% skin/username decoupling, and default settings reset"
 }

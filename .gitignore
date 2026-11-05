@@ -23,6 +23,7 @@ versions/
 build/
 dist/
 *.spec
+*.exe
 .moon_cache/
 .backup/
 *.tmp

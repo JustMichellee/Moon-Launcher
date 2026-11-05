@@ -3,7 +3,7 @@
   "buildNumber": 40,
   "loadlist": [
     {
-      "name": "LocalSkin",
+      "name": "LocalSkinUser",
       "type": "Legacy",
       "checkPNG": false,
       "skin": "CustomSkinLoader/LocalSkin/skins/{USERNAME}.png",
@@ -12,7 +12,14 @@
       "elytra": "CustomSkinLoader/LocalSkin/elytras/{USERNAME}.png"
     },
     {
-      "name": "LocalSkinRoot",
+      "name": "LocalSkinActive",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "CustomSkinLoader/LocalSkin/skins/active_skin.png",
+      "model": "auto"
+    },
+    {
+      "name": "LocalSkinRootUser",
       "type": "Legacy",
       "checkPNG": false,
       "skin": "LocalSkin/skins/{USERNAME}.png",
@@ -21,7 +28,14 @@
       "elytra": "LocalSkin/elytras/{USERNAME}.png"
     },
     {
-      "name": "LauncherSkins",
+      "name": "LocalSkinRootActive",
+      "type": "Legacy",
+      "checkPNG": false,
+      "skin": "LocalSkin/skins/active_skin.png",
+      "model": "auto"
+    },
+    {
+      "name": "LauncherSkinsUser",
       "type": "Legacy",
       "checkPNG": false,
       "skin": "skins/{USERNAME}.png",
@@ -29,42 +43,11 @@
       "cape": "skins/{USERNAME}.png"
     },
     {
-      "name": "Mojang",
-      "type": "MojangAPI",
-      "apiRoot": "https://api.mojang.com/",
-      "sessionRoot": "https://sessionserver.mojang.com/"
-    },
-    {
-      "name": "TLauncher",
-      "type": "ElyByAPI",
-      "root": "https://auth.tlauncher.org/skin/profile/texture/login/"
-    },
-    {
-      "name": "ElyBy",
-      "type": "ElyByAPI",
-      "root": "https://skinsystem.ely.by/textures/"
-    },
-    {
-      "name": "LittleSkin",
-      "type": "CustomSkinAPI",
-      "root": "https://littleskin.cn/csl/"
-    },
-    {
-      "name": "BlessingSkin",
-      "type": "CustomSkinAPI",
-      "root": "https://skin.prinzeugen.net/"
-    },
-    {
-      "name": "MCHeadsSkin",
+      "name": "LauncherSkinsActive",
       "type": "Legacy",
       "checkPNG": false,
-      "skin": "https://mc-heads.net/skin/{USERNAME}.png",
+      "skin": "skins/active_skin.png",
       "model": "auto"
-    },
-    {
-      "name": "MinecraftCapes",
-      "type": "MinecraftCapesAPI",
-      "root": "https://api.minecraftcapes.net/profile/"
     },
     {
       "name": "OptiFine",
@@ -74,14 +57,15 @@
       "cape": "https://optifine.net/capes/{USERNAME}.png"
     }
   ],
+  "enableDynamicSkull": true,
   "enableTransparentSkin": true,
   "forceLoadAllTextures": true,
   "enableCape": true,
   "threadPoolSize": 8,
   "enableLogStdOut": false,
-  "cacheExpiry": 30,
+  "cacheExpiry": 0,
   "forceUpdateSkull": false,
-  "enableLocalProfileCache": true,
-  "enableCacheAutoClean": false,
-  "forceDisableCache": false
+  "enableLocalProfileCache": false,
+  "enableCacheAutoClean": true,
+  "forceDisableCache": true
 }

@@ -884,6 +884,46 @@
     </div>
   </div>
 
+  <!-- MODAL: JAVA RUNTIME RECOMMENDATION & DOWNLOAD -->
+  <div class="modal-backdrop" id="modal-java-download">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" id="modal-java-badge" style="background: var(--pal-coral); color: #fff; margin-bottom: 6px;">JAVA RUNTIME REQUIRED</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;" id="modal-java-title">Java Version Incompatible or Missing</h3>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-java-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+        <div style="font-weight: 800; font-size: 0.94rem; margin-bottom: 4px;" id="modal-java-reason">
+          Minecraft 1.20.1 memerlukan Java 17 LTS untuk dapat dijalankan.
+        </div>
+        <div style="font-size: 0.80rem; color: var(--ink-muted);" id="modal-java-detail">
+          Java tidak ditemukan pada komputer Anda atau versi yang digunakan tidak kompatibel. Unduh Java resmi yang direkomendasikan secara gratis di bawah ini.
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+        <button class="btn btn-primary" id="btn-java-download-msi" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <span id="modal-java-btn-text">Download Eclipse Temurin Java 17 LTS (MSI)</span>
+        </button>
+
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" id="btn-java-choose-file" style="flex: 1; justify-content: center; padding: 9px 12px; font-size: 0.84rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            <span>Pilih File javaw.exe...</span>
+          </button>
+          <button class="btn btn-white" id="btn-java-open-web" style="flex: 1; justify-content: center; padding: 9px 12px; font-size: 0.84rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            <span>Halaman Download Web</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="app-toast" class="toast-notice"></div>
 

@@ -1,4 +1,4 @@
-﻿ACTIVE_GAME_PROC = None
+ACTIVE_GAME_PROC = None
 """
 🌙 Moon Launcher Studio - Complete Desktop GUI
 Full-featured desktop interface for Moon Launcher covering all CLI studios:
@@ -751,9 +751,10 @@ class MoonApi:
                             break
                         except Exception: pass
 
-        # Replicate active skin to target {clean}.png for CustomSkinLoader
+        # Replicate active skin to target {clean}.png and active_skin.png for CustomSkinLoader
         if os.path.exists(active_skin_path):
-            try: shutil.copy2(active_skin_path, target_skin_path)
+            try:
+                shutil.copy2(active_skin_path, target_skin_path)
             except Exception: pass
             cfg["custom_skin"] = active_skin_path
 
@@ -762,9 +763,65 @@ class MoonApi:
             v_dir = os.path.join(VERSIONS_DIR, cfg.get("version_name", "1.20.1"))
             launcher.set_global_username(clean, v_dir)
 
-        # Avatar remains the active skin! Name change does NOT affect skin!
-        new_avatar = get_skin_head_data_url(cfg.get("custom_skin"), clean)
+        # Avatar strictly displays the active skin! Name change does NOT affect skin!
+        new_avatar = get_skin_head_data_url(active_skin_path if os.path.exists(active_skin_path) else cfg.get("custom_skin"), clean)
         return {"success": True, "username": clean, "avatar_url": new_avatar}
+
+    def choose_java_file(self):
+        """Opens native file picker to select custom javaw.exe executable"""
+        selected_path = None
+        try:
+            if webview.windows and len(webview.windows) > 0:
+                result = webview.windows[0].create_file_dialog(
+                    webview.OPEN_DIALOG,
+                    file_types=('Java Executable (javaw.exe; java.exe)', 'All files (*.*)')
+                )
+                if result and len(result) > 0:
+                    selected_path = result[0]
+        except Exception as e:
+            print(f"Webview java file dialog error: {e}")
+
+        if not selected_path:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                selected_path = filedialog.askopenfilename(
+                    title="Select Java Executable (javaw.exe)",
+                    filetypes=[("Java Executable", "javaw.exe;java.exe"), ("All Files", "*.*")]
+                )
+                root.destroy()
+            except Exception as e:
+                print(f"Tkinter java file dialog error: {e}")
+
+        if selected_path and os.path.exists(selected_path):
+            cfg = read_config()
+            cfg["java_path"] = selected_path
+            write_config(cfg)
+
+            # Sync to active version
+            v_name = cfg.get("version_name")
+            if v_name:
+                v_dir = os.path.join(VERSIONS_DIR, v_name)
+                if launcher and hasattr(launcher, 'save_config'):
+                    launcher.save_config(v_dir, cfg)
+
+            return {"success": True, "java_path": selected_path}
+
+        return {"success": False, "cancelled": True}
+
+    def open_external_url(self, url):
+        """Opens a link in the user's default web browser"""
+        try:
+            import webbrowser
+            if url and str(url).startswith(("http://", "https://")):
+                webbrowser.open(str(url))
+                return {"success": True}
+            return {"success": False, "error": "Invalid URL"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def choose_skin_file(self):
         """Opens native file picker dialog to pick a .png skin file"""
@@ -937,6 +994,32 @@ class MoonApi:
 
             version_dir = launcher.get_active_version_dir()
             cfg = launcher.load_config(version_dir)
+            mc_ver, loader = "1.20.1", "Forge"
+            if hasattr(launcher, 'detect_version_and_loader'):
+                try: mc_ver, loader = launcher.detect_version_and_loader(version_dir)
+                except Exception: pass
+
+            j_path = launcher.get_best_java_for_version(mc_ver, cfg.get('java_path')) if hasattr(launcher, 'get_best_java_for_version') else cfg.get('java_path')
+
+            # Verify Java compatibility before launching
+            if hasattr(launcher, 'inspect_java_binary') and hasattr(launcher, 'get_required_java_version'):
+                j_valid, j_major, j_detail = launcher.inspect_java_binary(j_path)
+                req_java = launcher.get_required_java_version(mc_ver)
+                if not j_valid or (j_major and j_major != req_java):
+                    rec = launcher.get_java_recommendation(mc_ver) if hasattr(launcher, 'get_java_recommendation') else {}
+                    return {
+                        "success": False,
+                        "java_missing": True,
+                        "mc_version": mc_ver,
+                        "required_java": req_java,
+                        "current_java": j_major,
+                        "java_name": rec.get("name", f"Java {req_java} LTS"),
+                        "web_url": rec.get("web_url", f"https://adoptium.net/temurin/releases/?version={req_java}"),
+                        "direct_msi": rec.get("direct_msi", rec.get("web_url")),
+                        "reason": rec.get("reason", f"Minecraft {mc_ver} memerlukan Java {req_java} LTS."),
+                        "error": f"Minecraft {mc_ver} memerlukan {rec.get('name', 'Java ' + str(req_java))} (terdeteksi: Java {j_major if j_major else 'Tidak Ditemukan'})."
+                    }
+
             if direct_server:
                 srv_str = str(direct_server).strip()
                 if ':' in srv_str:
