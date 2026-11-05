@@ -1,0 +1,7 @@
+{
+  "version": "2.4.5",
+  "commit_sha": "3d70d61",
+  "branch": "main",
+  "updated_at": "2026-10-31 12:46:37",
+  "release_notes": "feat(cloud): Supabase Cloud Presence, global matchmaking without Radmin, and /cloud setup CLI"
+}
