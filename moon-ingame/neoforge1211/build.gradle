@@ -1,0 +1,52 @@
+plugins {
+    id 'dev.architectury.loom' version '1.10.455'
+}
+
+version = '1.0.0'
+group = 'dev.moonlauncher'
+def mc_range = "[1.21, 1.21.2)"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.architectury.dev/' }
+    maven { url = 'https://maven.fabricmc.net/' }
+}
+
+sourceSets {
+    main {
+        java.srcDirs += file('../common/src/main/java')
+        java.srcDirs += file('../common-gg/src/main/java')
+        java.srcDirs += file('../common-fov-double/src/main/java')
+        resources.srcDirs += file('../common/src/main/resources')
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:1.21.1"
+    mappings loom.officialMojangMappings()
+    neoForge "net.neoforged:neoforge:21.1.267"
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mc_range", mc_range
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(
+            "version": project.version,
+            "mc_range": mc_range
+        )
+    }
+}
+
+remapJar {
+    archiveBaseName = "moon-ingame-neoforge-1.21.1"
+}

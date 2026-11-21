@@ -3,13 +3,13 @@
   "id": "moon_ingame",
   "version": "${version}",
   "name": "Moon In-Game Client HUD & Auto-Host",
-  "description": "True in-game Mixin integration for Moon Launcher: 1-Click Auto-LAN P2P Host, In-Game Direct Join, Keystrokes/CPS, Armor/Potions/Totem HUD, ToggleSprint, Smooth Zoom, and Auto-GG.",
+  "description": "True in-game Mixin integration for Moon Launcher: Fair-Play Guard, 1-Click Auto-LAN P2P Host, In-Game Direct Join, Drag HUD Editor, Keystrokes/CPS, Armor/Potions/Totem HUD, Freelook, ToggleSprint, Smooth Zoom, and Auto-GG.",
   "authors": ["Moon Launcher"],
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
     "client": [
-      "dev.moonlauncher.ingame.MoonIngameMod"
+      "dev.moonlauncher.ingame.MoonFabricEntrypoint"
     ]
   },
   "mixins": [

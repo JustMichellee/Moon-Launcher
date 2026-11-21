@@ -2,6 +2,7 @@ package dev.moonlauncher.ingame.mixin;
 
 import dev.moonlauncher.ingame.MoonIngameConfig;
 import dev.moonlauncher.ingame.MoonIngameState;
+import dev.moonlauncher.ingame.VersionBridgeImpl;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
@@ -25,9 +26,7 @@ public class ChatComponentMixin {
                 MoonIngameState.lastAutoGgMs = now;
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
-                    if (mc.player != null && mc.player.connection != null) {
-                        mc.player.connection.sendChat("gg");
-                    }
+                    VersionBridgeImpl.sendChat(mc, "gg");
                 });
             }
         }

@@ -70,8 +70,12 @@ Source: "..\templates\*"; DestDir: "{app}\templates"; Flags: ignoreversion recur
 Source: "..\skins\Player.png"; DestDir: "{app}\skins"; Flags: ignoreversion onlyifdoesntexist
 Source: "..\moon-sync-mod\moon-sync-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
 Source: "..\moon-sync-mod\moon-sync-forge-legacy-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
+Source: "..\moon-sync-mod\moon-ingame-fabric-1.19.2-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
 Source: "..\moon-sync-mod\moon-ingame-fabric-1.20.1-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
 Source: "..\moon-sync-mod\moon-ingame-fabric-1.21.1-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
+Source: "..\moon-sync-mod\moon-ingame-fabric-1.21.5-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
+Source: "..\moon-sync-mod\moon-ingame-forge-1.20.1-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
+Source: "..\moon-sync-mod\moon-ingame-neoforge-1.21.1-1.0.0.jar"; DestDir: "{app}\moon-sync-mod"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu & Windows Search shortcuts (always installed so app appears in Windows)

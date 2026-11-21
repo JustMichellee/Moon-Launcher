@@ -2,9 +2,9 @@ package dev.moonlauncher.ingame;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -12,6 +12,13 @@ import net.minecraft.world.item.Items;
 import java.util.Collection;
 
 public class MoonHudRenderer {
+
+    private static final EquipmentSlot[] ARMOR_SLOTS = new EquipmentSlot[] {
+        EquipmentSlot.FEET,
+        EquipmentSlot.LEGS,
+        EquipmentSlot.CHEST,
+        EquipmentSlot.HEAD
+    };
 
     public static int[] getTelemetryPos(int sw, int sh) {
         MoonIngameConfig cfg = MoonIngameConfig.get();
@@ -34,7 +41,7 @@ public class MoonHudRenderer {
         return new int[] { x, y };
     }
 
-    public static void render(GuiGraphics g) {
+    public static void render(MoonDraw g) {
         Minecraft mc = Minecraft.getInstance();
         MoonIngameConfig cfg = MoonIngameConfig.get();
         if (!cfg.hudEnabled || mc.player == null || mc.options.hideGui) return;
@@ -42,22 +49,22 @@ public class MoonHudRenderer {
         renderModules(g, mc, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight());
     }
 
-    public static void renderPreview(GuiGraphics g, int sw, int sh) {
+    public static void renderPreview(MoonDraw g, int sw, int sh) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         renderModules(g, mc, sw, sh);
     }
 
-    private static void renderModules(GuiGraphics g, Minecraft mc, int sw, int sh) {
+    private static void renderModules(MoonDraw g, Minecraft mc, int sw, int sh) {
         MoonIngameConfig cfg = MoonIngameConfig.get();
         Font font = mc.font;
         Player player = mc.player;
 
-        // 1. Core Telemetry Strip (FPS, Ping, Coords, Fair-Play / Freelook status, P2P Room)
+        // 1. Core Telemetry Strip (FPS, Ping, Coords, Sprint / Freelook status, P2P Room)
         int[] tPos = getTelemetryPos(sw, sh);
         int x = tPos[0];
         int y = tPos[1];
-        int fps = mc.getFps();
+        int fps = VersionBridgeImpl.getFps(mc);
         int ping = -1;
         if (mc.getConnection() != null) {
             PlayerInfo info = mc.getConnection().getPlayerInfo(player.getUUID());
@@ -86,18 +93,22 @@ public class MoonHudRenderer {
             drawKey(g, font, kx, ky + 60, 70, 14, "SPACE", mc.options.keyJump.isDown());
         }
 
-        // 3. Armor Durability + Totem Counter + Potion Timers
+        // 3. Armor Durability + Totem Counter + Potion Timers (cross-version safe EquipmentSlot + Container scan)
         if (cfg.armorPotionsEnabled) {
             int[] aPos = getArmorPos(sw, sh);
             int ax = aPos[0];
             int ay = aPos[1];
 
             int totems = 0;
-            for (ItemStack st : player.getInventory().items) {
-                if (st.is(Items.TOTEM_OF_UNDYING)) totems += st.getCount();
+            int invSize = player.getInventory().getContainerSize();
+            for (int i = 0; i < invSize; i++) {
+                ItemStack st = player.getInventory().getItem(i);
+                if (!st.isEmpty() && st.is(Items.TOTEM_OF_UNDYING)) totems += st.getCount();
             }
-            for (ItemStack st : player.getInventory().offhand) {
-                if (st.is(Items.TOTEM_OF_UNDYING)) totems += st.getCount();
+            ItemStack off = player.getOffhandItem();
+            if (!off.isEmpty() && off.is(Items.TOTEM_OF_UNDYING)) {
+                // Only add if offhand wasn't already inside container slots (offhand is slot 40 on standard 41-slot inventory)
+                if (invSize <= 40) totems += off.getCount();
             }
             if (totems > 0) {
                 g.fill(ax, ay - 2, ax + 68, ay + 12, 0x880B1020);
@@ -105,7 +116,8 @@ public class MoonHudRenderer {
                 ay -= 16;
             }
 
-            for (ItemStack armor : player.getInventory().armor) {
+            for (EquipmentSlot slot : ARMOR_SLOTS) {
+                ItemStack armor = player.getItemBySlot(slot);
                 if (armor.isEmpty() || !armor.isDamageableItem()) continue;
                 int rem = armor.getMaxDamage() - armor.getDamageValue();
                 int pct = Math.max(0, (rem * 100) / Math.max(1, armor.getMaxDamage()));
@@ -132,7 +144,7 @@ public class MoonHudRenderer {
         }
     }
 
-    private static void drawBoxedText(GuiGraphics g, Font font, int x, int y, String l1, String l2, String l3) {
+    private static void drawBoxedText(MoonDraw g, Font font, int x, int y, String l1, String l2, String l3) {
         int w = Math.max(font.width(l1), font.width(l2));
         if (l3 != null) w = Math.max(w, font.width(l3));
         int rows = l3 != null ? 3 : 2;
@@ -142,13 +154,12 @@ public class MoonHudRenderer {
         if (l3 != null) g.drawString(font, l3, x + 1, y + 22, 0xC4B5FD);
     }
 
-    private static void drawKey(GuiGraphics g, Font font, int x, int y, int w, int h, String label, boolean pressed) {
+    private static void drawKey(MoonDraw g, Font font, int x, int y, int w, int h, String label, boolean pressed) {
         int bg = pressed ? 0xCC7C3AED : 0x880F172A;
         int fg = pressed ? 0xFFFFFF : 0xCBD5E1;
         g.fill(x, y, x + w, y + h, bg);
-        g.renderOutline(x, y, w, h, pressed ? 0xFFA78BFA : 0x66475569);
+        g.outline(x, y, w, h, pressed ? 0xFFA78BFA : 0x66475569);
         int tw = font.width(label);
         g.drawString(font, label, x + (w - tw) / 2, y + (h - 8) / 2, fg);
     }
 }
-

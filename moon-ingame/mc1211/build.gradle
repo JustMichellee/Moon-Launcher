@@ -2,7 +2,7 @@ plugins {
     id 'fabric-loom'
 }
 
-ext.mc_range = ">=1.21 <=1.21.4"
+ext.mc_range = ">=1.21 <=1.21.1"
 
 java {
     toolchain {
@@ -10,6 +10,15 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+}
+
+sourceSets {
+    main {
+        java.srcDirs += rootProject.file('common-gg/src/main/java')
+        java.srcDirs += rootProject.file('common-fov-double/src/main/java')
+        java.srcDirs += rootProject.file('common-fabric/src/main/java')
+        resources.srcDirs += rootProject.file('common-fabric/src/main/resources')
+    }
 }
 
 dependencies {

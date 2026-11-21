@@ -1,0 +1,51 @@
+plugins {
+    id 'net.neoforged.moddev.legacyforge'
+}
+
+ext.mc_range = "[1.20, 1.21)"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+sourceSets {
+    main {
+        java.srcDirs += rootProject.file('common-fov-double/src/main/java')
+    }
+}
+
+legacyForge {
+    version = "1.20.1-47.4.28"
+}
+
+mixin {
+    add sourceSets.main, "moon_ingame.refmap.json"
+    config "moon_ingame.mixins.json"
+}
+
+dependencies {
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+processResources {
+    filesMatching("moon_ingame.mixins.json") {
+        filter { line ->
+            if (line.contains('"ScreenAccessor"')) return ""
+            return line.contains('"compatibilityLevel"') ? (line + '\n  "refmap": "moon_ingame.refmap.json",') : line
+        }
+    }
+}
+
+jar {
+    archiveBaseName = "moon-ingame-forge-1.20.1"
+    manifest {
+        attributes([
+            "MixinConfigs": "moon_ingame.mixins.json"
+        ])
+    }
+}
+

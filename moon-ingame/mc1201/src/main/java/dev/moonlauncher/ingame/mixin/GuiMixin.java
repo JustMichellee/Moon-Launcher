@@ -1,5 +1,6 @@
 package dev.moonlauncher.ingame.mixin;
 
+import dev.moonlauncher.ingame.MoonDrawImpl;
 import dev.moonlauncher.ingame.MoonHudRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GuiMixin {
     @Inject(method = "render", at = @At("TAIL"), require = 0)
     private void moon$renderHud(GuiGraphics guiGraphics, float partialTick, CallbackInfo ci) {
-        MoonHudRenderer.render(guiGraphics);
+        MoonHudRenderer.render(MoonDrawImpl.of(guiGraphics));
     }
 }
 

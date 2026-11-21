@@ -2,8 +2,8 @@ package dev.moonlauncher.ingame.mixin;
 
 import dev.moonlauncher.ingame.MoonConfigScreen;
 import dev.moonlauncher.ingame.MoonIngameState;
+import dev.moonlauncher.ingame.UiBridgeImpl;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -23,19 +23,15 @@ public abstract class PauseScreenMixin {
         int y = self.height - 54;
 
         if (mc.hasSingleplayerServer()) {
-            ((ScreenAccessor) self).moon$addRenderableWidget(
-                Button.builder(Component.literal("Share World (P2P)"), btn -> {
-                    mc.setScreen(null);
-                    MoonIngameState.shareWorldOneClick(true);
-                }).bounds(x, y, btnW, 20).build()
-            );
+            UiBridgeImpl.addBtn(self, x, y, btnW, 20, Component.literal("Share World (P2P)"), btn -> {
+                mc.setScreen(null);
+                MoonIngameState.shareWorldOneClick(true);
+            });
             y += 24;
         }
-        ((ScreenAccessor) self).moon$addRenderableWidget(
-            Button.builder(Component.literal("Moon Client Menu"), btn -> {
-                mc.setScreen(new MoonConfigScreen(self));
-            }).bounds(x, y, btnW, 20).build()
-        );
+        UiBridgeImpl.addBtn(self, x, y, btnW, 20, Component.literal("Moon Client Menu"), btn -> {
+            mc.setScreen(new MoonConfigScreen(self));
+        });
     }
 }
 

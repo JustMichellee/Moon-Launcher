@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[2,)"
+license="MIT"
+
+[[mods]]
+modId="moon_ingame"
+version="${version}"
+displayName="Moon In-Game Client HUD & Auto-Host"
+authors="Moon Launcher"
+description="True in-game Mixin integration for Moon Launcher: Fair-Play Guard, 1-Click Auto-LAN P2P Host, In-Game Direct Join, Drag HUD Editor, Keystrokes/CPS, Armor/Potions/Totem HUD, Freelook, ToggleSprint, Smooth Zoom, and Auto-GG."
+
+[[mixins]]
+config="moon_ingame.mixins.json"
+
+[[dependencies.moon_ingame]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.0,)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.moon_ingame]]
+    modId="minecraft"
+    type="required"
+    versionRange="${mc_range}"
+    ordering="NONE"
+    side="CLIENT"
+

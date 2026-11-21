@@ -1,8 +1,8 @@
 package dev.moonlauncher.ingame.mixin;
 
 import dev.moonlauncher.ingame.MoonConfigScreen;
+import dev.moonlauncher.ingame.UiBridgeImpl;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.network.chat.Component;
@@ -16,11 +16,9 @@ public class JoinMultiplayerScreenMixin {
     @Inject(method = "init", at = @At("TAIL"), require = 0)
     private void moon$addMultiplayerButton(CallbackInfo ci) {
         Screen self = (Screen) (Object) this;
-        ((ScreenAccessor) self).moon$addRenderableWidget(
-            Button.builder(Component.literal("Moon HUD"), btn -> {
-                Minecraft.getInstance().setScreen(new MoonConfigScreen(self));
-            }).bounds(8, 8, 76, 20).build()
-        );
+        UiBridgeImpl.addBtn(self, 8, 8, 76, 20, Component.literal("Moon HUD"), btn -> {
+            Minecraft.getInstance().setScreen(new MoonConfigScreen(self));
+        });
     }
 }
 

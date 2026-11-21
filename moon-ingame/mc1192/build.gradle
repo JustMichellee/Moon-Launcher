@@ -1,0 +1,32 @@
+plugins {
+    id 'fabric-loom'
+}
+
+ext.mc_range = ">=1.19 <=1.19.4"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+sourceSets {
+    main {
+        java.srcDirs += rootProject.file('common-fov-double/src/main/java')
+        java.srcDirs += rootProject.file('common-fabric/src/main/java')
+        resources.srcDirs += rootProject.file('common-fabric/src/main/resources')
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:1.19.2"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+}
+
+remapJar {
+    archiveBaseName = "moon-ingame-fabric-1.19.2"
+}
+

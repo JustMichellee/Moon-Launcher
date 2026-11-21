@@ -2622,7 +2622,7 @@ def ensure_moon_sync_mod(version_dir, declared_loader=None, mc_version=None):
     except Exception:
         return False
 
-    # Deploy optional moon-ingame Fabric Mixin addon (1.20.1 / 1.21.1)
+    # Deploy optional moon-ingame Mixin addon (Fabric 1.19–1.21.11, Forge 1.20.x, NeoForge 1.21.1)
     try:
         expected_ingame = _resolve_moon_ingame_jar(version_dir, declared_loader, mc_version)
         for fname in list(os.listdir(mods_dir)):
@@ -2668,16 +2668,25 @@ def _resolve_moon_ingame_jar(version_dir, declared_loader=None, mc_version=None)
                         loader_str = "forge"
             except Exception:
                 pass
-    if "fabric" not in loader_str:
-        return None
-    m = re.search(r"1\.(\d+)", ver_str)
+    m = re.search(r"1\.(\d+)(?:\.(\d+))?", ver_str)
     if not m:
         return None
     minor = int(m.group(1))
-    if minor == 20:
-        return "moon-ingame-fabric-1.20.1-1.0.0.jar"
-    if minor == 21:
-        return "moon-ingame-fabric-1.21.1-1.0.0.jar"
+    patch = int(m.group(2) or 0)
+
+    if "fabric" in loader_str:
+        if minor == 19:
+            return "moon-ingame-fabric-1.19.2-1.0.0.jar"
+        if minor == 20:
+            return "moon-ingame-fabric-1.20.1-1.0.0.jar"
+        if minor == 21:
+            return "moon-ingame-fabric-1.21.5-1.0.0.jar" if patch >= 2 else "moon-ingame-fabric-1.21.1-1.0.0.jar"
+    elif "neoforge" in loader_str:
+        if minor == 21 and patch <= 1:
+            return "moon-ingame-neoforge-1.21.1-1.0.0.jar"
+    elif "forge" in loader_str:
+        if minor == 20:
+            return "moon-ingame-forge-1.20.1-1.0.0.jar"
     return None
 
 

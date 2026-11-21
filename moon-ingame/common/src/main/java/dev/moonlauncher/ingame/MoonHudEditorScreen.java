@@ -1,12 +1,10 @@
 package dev.moonlauncher.ingame;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public class MoonHudEditorScreen extends Screen {
+public class MoonHudEditorScreen extends MoonBaseScreen {
 
     private final Screen parent;
     private int dragging = 0; // 1=telemetry, 2=keystrokes, 3=armor
@@ -22,7 +20,7 @@ public class MoonHudEditorScreen extends Screen {
     protected void init() {
         int cx = this.width / 2;
         int by = this.height - 32;
-        this.addRenderableWidget(Button.builder(Component.literal("Reset Default Layout"), btn -> {
+        UiBridgeImpl.addBtn(this, cx - 155, by, 150, 20, Component.literal("Reset Default Layout"), btn -> {
             MoonIngameConfig cfg = MoonIngameConfig.get();
             cfg.telemetryX = -1;
             cfg.telemetryY = -1;
@@ -31,12 +29,12 @@ public class MoonHudEditorScreen extends Screen {
             cfg.armorX = -1;
             cfg.armorY = -1;
             cfg.save();
-        }).bounds(cx - 155, by, 150, 20).build());
+        });
 
-        this.addRenderableWidget(Button.builder(Component.literal("Save & Back"), btn -> {
+        UiBridgeImpl.addBtn(this, cx + 5, by, 150, 20, Component.literal("Save & Back"), btn -> {
             MoonIngameConfig.get().save();
             this.minecraft.setScreen(parent);
-        }).bounds(cx + 5, by, 150, 20).build());
+        });
     }
 
     @Override
@@ -102,9 +100,9 @@ public class MoonHudEditorScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    protected void renderMoon(MoonDraw g, int mouseX, int mouseY, float partialTick) {
         g.fill(0, 0, this.width, this.height, 0x66090D16);
-        g.drawCenteredString(this.font, "\u00a7bDrag HUD Boxes to Reposition • Click Save & Back", this.width / 2, 12, 0xFFFFFF);
+        g.drawCentered(this.font, "\u00a7bDrag HUD Boxes to Reposition • Click Save & Back", this.width / 2, 12, 0xFFFFFF);
 
         int[] tPos = MoonHudRenderer.getTelemetryPos(this.width, this.height);
         int[] kPos = MoonHudRenderer.getKeystrokesPos(this.width, this.height);
@@ -118,12 +116,11 @@ public class MoonHudEditorScreen extends Screen {
         if (mc.player != null) {
             MoonHudRenderer.renderPreview(g, this.width, this.height);
         }
-        super.render(g, mouseX, mouseY, partialTick);
     }
 
-    private void drawHandle(GuiGraphics g, int x, int y, int w, int h, String label, boolean active) {
+    private void drawHandle(MoonDraw g, int x, int y, int w, int h, String label, boolean active) {
         g.fill(x, y, x + w, y + h, active ? 0x447C3AED : 0x331E293B);
-        g.renderOutline(x, y, w, h, active ? 0xFFA78BFA : 0xFF38BDF8);
+        g.outline(x, y, w, h, active ? 0xFFA78BFA : 0xFF38BDF8);
         g.drawString(this.font, "\u00a7b" + label, x + 3, Math.max(2, y - 10), 0xE2E8F0);
     }
 
@@ -135,4 +132,3 @@ public class MoonHudEditorScreen extends Screen {
         return Math.max(lo, Math.min(hi, v));
     }
 }
-

@@ -12,6 +12,15 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+sourceSets {
+    main {
+        java.srcDirs += rootProject.file('common-gg/src/main/java')
+        java.srcDirs += rootProject.file('common-fov-double/src/main/java')
+        java.srcDirs += rootProject.file('common-fabric/src/main/java')
+        resources.srcDirs += rootProject.file('common-fabric/src/main/resources')
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:1.20.1"
     mappings loom.officialMojangMappings()

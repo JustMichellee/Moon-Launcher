@@ -9,6 +9,16 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.world.effect.MobEffectInstance;
 
 public class VersionBridgeImpl {
+    public static int getFps(Minecraft mc) {
+        return mc != null ? mc.getFps() : 0;
+    }
+
+    public static void sendChat(Minecraft mc, String msg) {
+        if (mc != null && mc.player != null && mc.player.connection != null) {
+            mc.player.connection.sendChat(msg);
+        }
+    }
+
     public static String getEffectName(MobEffectInstance inst) {
         return inst.getEffect().value().getDisplayName().getString();
     }
