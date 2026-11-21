@@ -32,7 +32,7 @@ Every public release is distributed exclusively through a single Windows Setup I
 ### 3. Moon Client Companion Mod (`moon-sync`, Java 8 Universal)
 Automatically deployed and kept synchronized inside every modded profile (`Fabric`, `Quilt`, `Forge 1.8–1.12.2`, `Forge 1.13–1.21+`, and `NeoForge`):
 - **In-Game Social & Multiplayer Hub**: Runs an embedded localhost web hub (`http://127.0.0.1:<port>/`) and headless-safe Windows System Tray companion (`Moon Client Hub`) without depending on version-fragile obfuscated Minecraft GUI classes.
-- **Moon ID & Supabase Cloud Sync**: Connects persistent **Moon ID (`MOON-XXXX`)** directly to Supabase PostgreSQL tables (`players`, `presence`, `friendships`), supporting friend lookup, bidirectional friend requests (`Accept` / `Decline` / `Remove`), live activity detection from `logs/latest.log` (Open to LAN, Multiplayer server, Singleplayer world), and clean offline presence on shutdown.
+- **Moon ID & Cloudflare D1 Cloud Sync**: Connects persistent **Moon ID (`MOON-XXXX`)** directly to an always-on **Cloudflare Workers + D1** backend (`players`, `presence`, `friendships`, `pack_shares`), supporting zero-setup friend lookup, bidirectional friend requests (`Accept` / `Decline` / `Remove`), live activity detection from `logs/latest.log` (Open to LAN, Multiplayer server, Singleplayer world), `MOON-PACK-XXXX` pack share codes, and clean offline presence on shutdown (with optional Supabase fallback).
 - **Multiplayer Host & 1-Click Join**: Bridges directly with Moon Launcher's Playit internet tunnel (`/host`) for world sharing, provides 1-click friend joining (`moon-rejoin.json`), and includes a TCP Minecraft Server List Pinger (MOTD, latency, player counts).
 - **Client Utility Tools**: Mod manifest scanner & SHA-256 sync engine (`SyncEngine` with automatic exclusion of client-only optimization mods such as Sodium, Iris, Embeddium, Oculus, and FerriteCore), per-instance mod toggle, screenshot browser, world coordinate waypoints (`moon-notes.json`), and live JVM memory telemetry.
 
@@ -57,7 +57,7 @@ Automatically deployed and kept synchronized inside every modded profile (`Fabri
 1. Download **`Moon-Launcher-Setup-v2.5.1.exe`** from the [Releases](https://github.com/JustMichellee/Moon-Launcher/releases/tag/v2.5.1) page.
 2. Run the setup wizard and choose your preferred installation directory and integration tasks (Desktop shortcut, `moon://` URI handler, CLI `PATH`).
 3. Launch **Moon Launcher** or **Moon Launcher (CLI)** directly from the **Windows Start Menu**, **Windows Search**, or Desktop shortcut.
-4. *(Optional Cloud DB)*: To connect your own Supabase project for global friends sync, run the SQL schema in [`supabase_schema.sql`](supabase_schema.sql) and configure your Project URL and Anon/Publishable Key in **Settings -> Cloud Database** or via `/cloud setup`.
+4. *(Optional Self-Hosted Cloud DB)*: Global Moon ID friends sync and `MOON-PACK-XXXX` sharing work out of the box via Cloudflare Workers + D1. To override with your own Cloudflare Worker endpoint (`cloudflare-worker/`) or Supabase project, configure it in **Settings -> Cloud Database** or via `/cloud setup`.
 
 ---
 
@@ -79,7 +79,7 @@ Automatically deployed and kept synchronized inside every modded profile (`Fabri
 | `/friend [list\|add\|accept\|join]` | Social | Manage Moon ID (`MOON-XXXX`) friends and requests |
 | `/host [start\|stop\|scan]` | Multiplayer | Start/stop Playit internet world tunnel or scan LAN |
 | `/server [list\|add]` | Multiplayer | Manage and ping saved Minecraft servers |
-| `/cloud [status\|setup]` | Cloud | Inspect or configure Supabase project credentials |
+| `/cloud [status\|setup]` | Cloud | Inspect or override Cloudflare Worker / Supabase cloud endpoint |
 | `/mods [filter]` | Mods | List, enable, or disable `.jar` mods in active instance |
 | `/setting` | Config | Open interactive terminal Settings Studio |
 
@@ -91,6 +91,7 @@ Automatically deployed and kept synchronized inside every modded profile (`Fabri
 Moon-Launcher/
 ├── assets/                   # Icons, brand assets, default Minecraft artwork
 ├── build/                    # PyInstaller .spec files & Inno Setup script (Moon-Launcher-Setup.iss)
+├── cloudflare-worker/        # Cloudflare Workers + D1 backend (`src/index.js`, `schema.sql`, `wrangler.toml`)
 ├── gui/                      # Desktop Studio HTML/CSS/JS frontend assets
 ├── moon-sync-mod/            # Universal Java 8 companion mod sources & build_mod.ps1
 ├── scripts/                  # Development runners and unified build script (build.ps1)
@@ -99,7 +100,7 @@ Moon-Launcher/
 ├── templates/                # Sanitized launch_args.txt, CustomSkinLoader & Log4j templates
 ├── launcher_config.json      # Clean default configuration template
 ├── friends.json              # Clean default friends & servers template
-├── supabase_schema.sql       # PostgreSQL schema (players, presence, friendships) for Supabase
+├── supabase_schema.sql       # Legacy optional PostgreSQL schema for Supabase self-hosting
 ├── version.json              # Release metadata (v2.5.1)
 └── requirements.txt          # Python build/runtime dependencies
 ```
