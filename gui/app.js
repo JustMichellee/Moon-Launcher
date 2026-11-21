@@ -261,22 +261,20 @@ async function initApp() {
     // Browser mock state preview
     applyLauncherState({
       config: {
-        username: 'JustMichellee',
-        version_name: 'CursedWalkingZS',
-        ram_max_gb: 8,
-        java_path: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe',
+        username: 'Player',
+        version_name: '1.21.1 Vanilla',
+        ram_max_gb: 4,
+        java_path: '',
         width: 1280,
         height: 720,
         fullscreen: false,
         discord_rpc: true,
         jvm_g1gc_preset: true
       },
-      active_version: 'CursedWalkingZS',
+      active_version: '1.21.1 Vanilla',
       versions: [
-        { name: 'CursedWalkingZS', loader: 'Forge', mc_version: '1.20.1', mod_count: 85, size_mb: 240.5 },
-        { name: 'NightfallCraft 2.2.9.7', loader: 'Forge', mc_version: '1.20.1', mod_count: 92, size_mb: 310.2 },
-        { name: 'Fabric 1.20.1', loader: 'Fabric', mc_version: '1.20.1', mod_count: 14, size_mb: 45.0 },
-        { name: '1.20.1 Vanilla', loader: 'Vanilla', mc_version: '1.20.1', mod_count: 0, size_mb: 0.0 }
+        { name: '1.21.1 Vanilla', loader: 'Vanilla', mc_version: '1.21.1', mod_count: 0, size_mb: 0.0 },
+        { name: 'Fabric 1.20.1', loader: 'Fabric', mc_version: '1.20.1', mod_count: 14, size_mb: 45.0 }
       ],
       specs: {
         cpu: 'AMD Ryzen 7 5800X 8-Core Processor',
@@ -302,11 +300,13 @@ function applyLauncherState(state) {
   appState = state;
   const cfg = state.config || {};
   const username = cfg.username || 'Player';
-  const savedLocalVer = localStorage.getItem('moon_active_version');
-  const activeVer = state.active_version || cfg.version_name || savedLocalVer || '1.20.1';
-  if (activeVer) {
-    try { localStorage.setItem('moon_active_version', activeVer); } catch (e) {}
-  }
+  const versionsList = Array.isArray(state.versions) ? state.versions : [];
+  const hasVersions = versionsList.length > 0;
+  const activeVer = hasVersions ? (state.active_version || versionsList[0].name || '') : '';
+  try {
+    if (activeVer) localStorage.setItem('moon_active_version', activeVer);
+    else localStorage.removeItem('moon_active_version');
+  } catch (e) {}
 
   // Sync running status on state load
   if (state.is_game_running) {
@@ -318,13 +318,49 @@ function applyLauncherState(state) {
     updateLaunchButtonState('idle');
   }
 
-  // 1. Header Player Chip
+  // 1. Header Player Chip & Auth Mode
   const headName = document.getElementById('header-player-name');
   if (headName) headName.innerText = username;
   const dashName = document.getElementById('dash-username-display');
   if (dashName) dashName.innerText = username;
+  const isMs = !!(state.active_account && state.active_account.type === 'microsoft');
+  const authBadge = document.getElementById('dash-auth-mode-badge');
+  if (authBadge) {
+    authBadge.innerText = isMs ? 'MICROSOFT' : 'OFFLINE';
+    authBadge.style.background = isMs ? 'var(--pal-mint)' : 'var(--pal-cream)';
+  }
+  const btnAccLbl = document.getElementById('btn-account-label');
+  if (btnAccLbl) btnAccLbl.innerText = isMs ? 'Switch Account' : 'Microsoft Login';
+
   const quickUser = document.getElementById('input-quick-username');
-  if (quickUser) quickUser.value = username;
+  const btnSaveU = document.getElementById('btn-save-username');
+  if (quickUser) {
+    quickUser.value = username;
+    quickUser.disabled = isMs;
+    quickUser.title = isMs ? 'Signed in with Microsoft. Click Switch Account to use offline username.' : '3-16 characters (letters, numbers, _)';
+  }
+  if (btnSaveU) {
+    btnSaveU.disabled = isMs;
+  }
+
+  const verBadge = document.getElementById('updater-local-ver');
+  if (verBadge && state.launcher_version) {
+    verBadge.innerText = state.launcher_version;
+  }
+
+  const rpcBadge = document.getElementById('rpc-status-badge');
+  if (rpcBadge && state.rpc_status) {
+    if (!state.rpc_status.enabled) {
+      rpcBadge.innerText = 'DISABLED';
+      rpcBadge.style.background = 'var(--pal-cream)';
+    } else if (state.rpc_status.connected) {
+      rpcBadge.innerText = 'DISCORD CONNECTED';
+      rpcBadge.style.background = 'var(--pal-mint)';
+    } else {
+      rpcBadge.innerText = 'WAITING FOR DISCORD';
+      rpcBadge.style.background = 'var(--pal-cream)';
+    }
+  }
 
   // Prioritize custom skin avatar from backend or fallback to Minotar
   const avatarUrl = state.avatar_url || cfg.custom_skin_url || 'https://minotar.net/bust/Steve/128.png';
@@ -335,23 +371,31 @@ function applyLauncherState(state) {
 
   // 2. Active Version Title & Badges
   const titleEl = document.getElementById('display-version-title');
-  if (titleEl) titleEl.innerText = activeVer;
+  if (titleEl) titleEl.innerText = activeVer || 'No Instance Installed';
   const modsTitle = document.getElementById('mods-studio-title');
-  if (modsTitle) modsTitle.innerText = activeVer + ' Mods';
+  if (modsTitle) modsTitle.innerText = activeVer ? (activeVer + ' Mods') : 'Mod Manager';
 
   // Find active version info in versions array
-  const activeMeta = (state.versions || []).find(v => v.name === activeVer) || {
-    name: activeVer,
-    loader: 'Forge',
-    mc_version: '1.20.1',
-    mod_count: 0,
-    size_mb: 0
-  };
+  const activeMeta = activeVer
+    ? ((state.versions || []).find(v => v.name === activeVer) || {
+        name: activeVer,
+        loader: 'Vanilla',
+        mc_version: '--',
+        mod_count: 0,
+        size_mb: 0
+      })
+    : {
+        name: '',
+        loader: 'None',
+        mc_version: '--',
+        mod_count: 0,
+        size_mb: 0
+      };
 
   const badgeLoader = document.getElementById('badge-loader');
-  if (badgeLoader) badgeLoader.innerText = 'Loader: ' + (activeMeta.loader || 'Vanilla');
+  if (badgeLoader) badgeLoader.innerText = 'Loader: ' + (activeMeta.loader || 'None');
   const badgeMc = document.getElementById('badge-mc-ver');
-  if (badgeMc) badgeMc.innerText = 'MC: ' + (activeMeta.mc_version || '1.20.1');
+  if (badgeMc) badgeMc.innerText = 'MC: ' + (activeMeta.mc_version || '--');
   const badgeMods = document.getElementById('badge-mod-count');
   if (badgeMods) badgeMods.innerText = 'Mods: ' + (activeMeta.mod_count || 0);
   const badgeSize = document.getElementById('badge-disk-size');
@@ -361,15 +405,24 @@ function applyLauncherState(state) {
   const selectVer = document.getElementById('select-active-version');
   if (selectVer) {
     selectVer.innerHTML = '';
-    (state.versions || []).forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.name;
-      opt.innerText = `${v.name} (${v.loader || 'Vanilla'} ${v.mc_version || ''})`;
-      if (v.name === activeVer) opt.selected = true;
-      selectVer.appendChild(opt);
-    });
-    if (activeVer) {
-      selectVer.value = activeVer;
+    const vList = state.versions || [];
+    if (!vList.length) {
+      const emptyOpt = document.createElement('option');
+      emptyOpt.value = '';
+      emptyOpt.innerText = 'No instances installed — Create or Install one';
+      selectVer.appendChild(emptyOpt);
+      selectVer.value = '';
+    } else {
+      vList.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.innerText = `${v.name} (${v.loader || 'Vanilla'} ${v.mc_version || ''})`;
+        if (v.name === activeVer) opt.selected = true;
+        selectVer.appendChild(opt);
+      });
+      if (activeVer) {
+        selectVer.value = activeVer;
+      }
     }
   }
 
@@ -397,6 +450,24 @@ function applyLauncherState(state) {
   if (rpcIn) rpcIn.checked = cfg.discord_rpc !== false;
   const g1gcIn = document.getElementById('setting-jvm-g1gc');
   if (g1gcIn) g1gcIn.checked = cfg.jvm_g1gc_preset !== false;
+  const hudIn = document.getElementById('setting-hud-overlay');
+  if (hudIn) hudIn.checked = cfg.hud_overlay !== false;
+  const bkpIn = document.getElementById('setting-auto-backup');
+  if (bkpIn) bkpIn.checked = cfg.auto_backup_worlds !== false;
+  refreshQolControls().catch(() => {});
+  const cloudUrlIn = document.getElementById('setting-cloud-api-url');
+  if (cloudUrlIn) cloudUrlIn.value = cfg.cloud_api_url || state.cloud_api_url || '';
+  const sbUrlIn = document.getElementById('setting-supabase-url');
+  if (sbUrlIn) sbUrlIn.value = cfg.supabase_url || '';
+  const sbKeyIn = document.getElementById('setting-supabase-key');
+  if (sbKeyIn) sbKeyIn.value = cfg.supabase_key || '';
+
+  const cloudBadge = document.getElementById('friends-cloud-badge');
+  if (cloudBadge) {
+    const engineLabel = state.cloud_engine === 'cloudflare' ? 'CLOUDFLARE SYNCED' : 'CLOUD SYNCED';
+    cloudBadge.innerText = state.cloud_reachable ? engineLabel : (state.supabase_configured ? 'CLOUD CONFIGURED' : 'LOCAL CACHE');
+    cloudBadge.style.background = state.cloud_reachable ? 'var(--pal-mint)' : 'var(--pal-cream)';
+  }
 
   // 1b. Moon ID Badge & Banner
   const moonId = state.moon_id || (cfg.moon_id) || 'MOON-4821';
@@ -422,8 +493,10 @@ function applyLauncherState(state) {
   const osEl = document.getElementById('spec-os-name');
   if (osEl) osEl.innerText = specs.os || 'Windows';
 
-  // Render Friends List
+  // Render Incoming Requests & Friends List
+  renderFriendRequests(state.incoming_requests || []);
   renderFriendsList(state.friends || []);
+  refreshSocialExtras().catch(() => {});
 
   // Render Java Runtimes list
   const jList = document.getElementById('spec-javas-list');
@@ -464,8 +537,52 @@ function applyLauncherState(state) {
 
 
 // ==========================================
-// FRIENDS LIST RENDERER
+// FRIENDS LIST & REQUESTS RENDERER
 // ==========================================
+function renderFriendRequests(requests) {
+  const box = document.getElementById('friends-requests-list');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!requests || !requests.length) return;
+
+  requests.forEach(r => {
+    const pid = r.player_id || '';
+    const row = document.createElement('div');
+    row.style.cssText = 'background: #fffbeb; border: 2px solid var(--ink-primary); border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 2px 2px 0px var(--ink-primary);';
+    row.innerHTML = `
+      <div>
+        <div style="font-weight: 800; font-size: 0.85rem;">Friend Request: ${r.username || pid}</div>
+        <div style="font-family: var(--font-mono); font-size: 0.70rem; color: var(--ink-muted);">${pid}</div>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-primary btn-acc-req" data-id="${pid}" style="padding: 3px 9px; font-size: 0.72rem;">Accept</button>
+        <button class="btn btn-secondary btn-dec-req" data-id="${pid}" style="padding: 3px 9px; font-size: 0.72rem;">Decline</button>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+
+  box.querySelectorAll('.btn-acc-req').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.accept_friend) {
+        await window.pywebview.api.accept_friend(btn.dataset.id);
+        showToast('Accepted friend: ' + btn.dataset.id);
+        const state = await window.pywebview.api.get_launcher_state();
+        applyLauncherState(state);
+      }
+    });
+  });
+  box.querySelectorAll('.btn-dec-req').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.decline_friend) {
+        await window.pywebview.api.decline_friend(btn.dataset.id);
+        const state = await window.pywebview.api.get_launcher_state();
+        applyLauncherState(state);
+      }
+    });
+  });
+}
+
 function renderFriendsList(friends) {
   const container = document.getElementById('friends-presence-list');
   if (!container) return;
@@ -477,26 +594,190 @@ function renderFriendsList(friends) {
   }
 
   friends.forEach(f => {
-    const isOnline = f.status === 'online' || f.status === 'in-game';
+    const st = (f.status || 'offline').toLowerCase();
+    const isOnline = st === 'online' || st === 'playing' || st === 'hosting' || st === 'in-game' || st === 'in_game';
+    const pid = f.player_id || f.username || '';
+    const subParts = [];
+    if (f.player_id) subParts.push(f.player_id);
+    if (f.version_name) subParts.push(f.version_name);
+    if (f.server_addr) subParts.push(f.server_addr);
+
     const row = document.createElement('div');
-    row.style.cssText = 'background: #ffffff; border: 2px solid var(--ink-primary); border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 2px 2px 0px var(--ink-primary);';
+    row.style.cssText = 'background: #ffffff; border: 2px solid var(--ink-primary); border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; box-shadow: 2px 2px 0px var(--ink-primary);';
 
     row.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
         <span class="ping-dot ${isOnline ? 'online' : 'offline'}"></span>
-        <div>
-          <div style="font-weight: 800; font-size: 0.88rem; color: var(--ink-primary);">${f.username || 'Friend'}</div>
-          ${f.player_id ? `<div style="font-family: var(--font-mono); font-size: 0.70rem; color: var(--ink-muted);">${f.player_id}</div>` : ''}
+        <div style="min-width: 0;">
+          <div style="font-weight: 800; font-size: 0.88rem; color: var(--ink-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.username || 'Friend'}</div>
+          ${subParts.length ? `<div style="font-family: var(--font-mono); font-size: 0.70rem; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${subParts.join(' • ')}</div>` : ''}
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="badge-tag" style="background: ${isOnline ? 'var(--pal-mint)' : 'var(--pal-cream)'}; font-size: 0.70rem; padding: 2px 7px;">
-          ${(f.status || 'offline').toUpperCase()}
+      <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+        <span class="badge-tag" style="background: ${isOnline ? 'var(--pal-mint)' : 'var(--pal-cream)'}; font-size: 0.68rem; padding: 2px 7px;">
+          ${st.toUpperCase()}
         </span>
+        ${f.server_addr ? `<button class="btn btn-primary btn-join-friend" data-addr="${f.server_addr}" style="padding: 2px 8px; font-size: 0.70rem;">Join</button>` : ''}
+        <button class="btn btn-secondary btn-del-friend" data-id="${pid}" title="Remove Friend" style="padding: 2px 7px; font-size: 0.70rem;">×</button>
       </div>
     `;
     container.appendChild(row);
   });
+
+  container.querySelectorAll('.btn-join-friend').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const addr = btn.dataset.addr;
+      if (addr) navigator.clipboard.writeText(addr).catch(() => {});
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.launch_game) {
+        showToast('Joining friend server: ' + addr);
+        await window.pywebview.api.launch_game(appState.active_version || null, addr);
+      }
+    });
+  });
+
+  container.querySelectorAll('.btn-del-friend').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.delete_friend) {
+        await window.pywebview.api.delete_friend(btn.dataset.id);
+        const state = await window.pywebview.api.get_launcher_state();
+        applyLauncherState(state);
+      }
+    });
+  });
+}
+
+let guiChatInitialized = false;
+async function refreshSocialExtras() {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_social_extras) return;
+  const sel = document.getElementById('gui-chat-target');
+  const prevVal = sel ? sel.value : '';
+  let peerId = null;
+  let partyId = null;
+  if (prevVal.startsWith('dm:')) peerId = prevVal.slice(3);
+  else if (prevVal.startsWith('party:')) partyId = prevVal.slice(6);
+
+  const data = await window.pywebview.api.get_social_extras(peerId, partyId);
+  renderGuiParty(data.party, data.pending_invites || []);
+  renderGuiChatTargets(data.party, prevVal);
+  renderGuiChatFeed(data.messages || []);
+  wireGuiSocialControls();
+}
+
+function wireGuiSocialControls() {
+  if (guiChatInitialized) return;
+  guiChatInitialized = true;
+  const wlBtn = document.getElementById('btn-sync-whitelist');
+  if (wlBtn) {
+    wlBtn.addEventListener('click', async () => {
+      if (window.pywebview?.api?.sync_friends_whitelist) {
+        const r = await window.pywebview.api.sync_friends_whitelist();
+        showToast(r.success ? `Synced ${r.count} friends to whitelist.json` : (r.error || 'Sync failed'));
+      }
+    });
+  }
+  const refBtn = document.getElementById('btn-gui-chat-refresh');
+  if (refBtn) refBtn.addEventListener('click', () => refreshSocialExtras());
+  const sel = document.getElementById('gui-chat-target');
+  if (sel) sel.addEventListener('change', () => refreshSocialExtras());
+
+  const sendFn = async () => {
+    const inp = document.getElementById('gui-chat-input');
+    const tgt = (document.getElementById('gui-chat-target') || {}).value || '';
+    const txt = (inp?.value || '').trim();
+    if (!tgt || !txt || !window.pywebview?.api?.send_chat_message) return;
+    inp.value = '';
+    if (tgt.startsWith('party:')) await window.pywebview.api.send_chat_message(null, tgt.slice(6), txt);
+    else if (tgt.startsWith('dm:')) await window.pywebview.api.send_chat_message(tgt.slice(3), null, txt);
+    refreshSocialExtras();
+  };
+  const sendBtn = document.getElementById('btn-gui-chat-send');
+  if (sendBtn) sendBtn.addEventListener('click', sendFn);
+  const inp = document.getElementById('gui-chat-input');
+  if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendFn(); });
+}
+
+function renderGuiParty(party, invites) {
+  const box = document.getElementById('party-squad-box');
+  if (!box) return;
+  let html = '';
+  if (invites && invites.length) {
+    invites.forEach(inv => {
+      html += `<div style="background:#fffbeb;border:2px solid var(--ink-primary);border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div><div style="font-weight:800;font-size:0.82rem;">Party Invite: ${inv.leader_name}</div><div style="font-size:0.70rem;color:var(--ink-muted);">${inv.party_id}${inv.target_server ? ' • ' + inv.target_server : ''}</div></div>
+        <div style="display:flex;gap:6px;"><button class="btn btn-primary btn-gui-join-pty" data-id="${inv.party_id}" style="padding:3px 9px;font-size:0.72rem;">Join</button><button class="btn btn-secondary btn-gui-dec-pty" data-id="${inv.party_id}" style="padding:3px 9px;font-size:0.72rem;">Decline</button></div>
+      </div>`;
+    });
+  }
+  if (!party) {
+    html += `<div style="display:flex;gap:8px;">
+      <button class="btn btn-secondary" id="btn-gui-create-pty" style="flex:1;padding:7px 10px;font-size:0.78rem;">Create Party</button>
+      <button class="btn btn-primary" id="btn-gui-mass-inv" style="flex:1;padding:7px 10px;font-size:0.78rem;">Mass Invite Friends</button>
+    </div>`;
+  } else {
+    html += `<div style="background:#f8fafc;border:2px solid var(--ink-primary);border-radius:8px;padding:8px 10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+        <div><b>${party.party_id}</b> ${party.is_leader ? '<span class="badge-tag" style="background:var(--pal-mint);font-size:0.65rem;">LEADER</span>' : ''}
+        <div style="font-size:0.72rem;color:var(--ink-muted);">Target: ${party.target_server || 'No target set'}</div></div>
+        <div style="display:flex;gap:6px;">${party.target_server ? `<button class="btn btn-primary" id="btn-gui-join-target" data-addr="${party.target_server}" style="padding:3px 9px;font-size:0.72rem;">Join Server</button>` : ''}<button class="btn btn-secondary" id="btn-gui-leave-pty" style="padding:3px 9px;font-size:0.72rem;">Leave</button></div>
+      </div>
+      ${party.is_leader ? `<button class="btn btn-secondary" id="btn-gui-mass-inv" style="width:100%;padding:5px 8px;font-size:0.74rem;margin-bottom:6px;">1-Click Invite All Friends</button>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">${(party.members || []).map(m => `<span class="badge-tag" style="background:#ffffff;font-size:0.68rem;">${m.username} (${m.role})</span>`).join('')}</div>
+    </div>`;
+  }
+  box.innerHTML = html;
+
+  box.querySelector('#btn-gui-create-pty')?.addEventListener('click', async () => {
+    await window.pywebview.api.create_party();
+    refreshSocialExtras();
+  });
+  box.querySelector('#btn-gui-mass-inv')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.mass_invite_party(null);
+    showToast(r.success ? `Invited ${(r.invited || []).length} friend(s) to ${r.party_id}` : (r.error || 'Invite failed'));
+    refreshSocialExtras();
+  });
+  box.querySelector('#btn-gui-leave-pty')?.addEventListener('click', async () => {
+    await window.pywebview.api.leave_party(null);
+    refreshSocialExtras();
+  });
+  box.querySelector('#btn-gui-join-target')?.addEventListener('click', async (e) => {
+    const addr = e.currentTarget.dataset.addr;
+    if (addr) {
+      navigator.clipboard.writeText(addr).catch(() => {});
+      await window.pywebview.api.launch_game(addr, appState.active_version || null);
+    }
+  });
+  box.querySelectorAll('.btn-gui-join-pty').forEach(b => b.addEventListener('click', async () => {
+    await window.pywebview.api.join_party(b.dataset.id);
+    refreshSocialExtras();
+  }));
+  box.querySelectorAll('.btn-gui-dec-pty').forEach(b => b.addEventListener('click', async () => {
+    await window.pywebview.api.leave_party(b.dataset.id);
+    refreshSocialExtras();
+  }));
+}
+
+function renderGuiChatTargets(party, prevVal) {
+  const sel = document.getElementById('gui-chat-target');
+  if (!sel) return;
+  const opts = [];
+  if (party && party.party_id) opts.push(`<option value="party:${party.party_id}">Party (${party.party_id})</option>`);
+  (appState.friends || []).forEach(f => {
+    if (f.player_id) opts.push(`<option value="dm:${f.player_id}">Whisper: ${f.username || f.player_id}</option>`);
+  });
+  if (!opts.length) opts.push('<option value="">Add a friend or party first</option>');
+  sel.innerHTML = opts.join('');
+  if (prevVal && [...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+}
+
+function renderGuiChatFeed(messages) {
+  const feed = document.getElementById('gui-chat-feed');
+  if (!feed) return;
+  if (!messages || !messages.length) {
+    feed.innerHTML = '<div style="color:var(--ink-muted);text-align:center;padding:12px;">No messages yet.</div>';
+    return;
+  }
+  feed.innerHTML = messages.map(m => `<div style="margin-bottom:5px;"><b>${m.sender_name || m.sender_id}</b> ${m.party_id ? `[${m.party_id}]` : '→ ' + (m.recipient_id || '')}: ${String(m.body || '').replace(/</g, '&lt;')}</div>`).join('');
+  feed.scrollTop = feed.scrollHeight;
 }
 
 // ==========================================
@@ -694,14 +975,20 @@ async function launchGame(directServer = null) {
     return;
   }
 
-  const verName = appState.active_version || '1.20.1';
+  const verName = appState.active_version || '';
+  if (!verName || !(appState.versions || []).length) {
+    showToast('No instance installed yet. Create or install an instance first!', true);
+    const modalCreate = document.getElementById('modal-create-instance');
+    if (modalCreate) modalCreate.classList.add('active');
+    return;
+  }
   isGameLaunching = true;
   updateLaunchButtonState('launching');
   showToast(`Starting Minecraft (${verName})...`);
 
   if (window.pywebview && window.pywebview.api) {
     try {
-      const res = await window.pywebview.api.launch_game(directServer);
+      const res = await window.pywebview.api.launch_game(directServer, verName);
       if (res && res.success) {
         isGameLaunching = false;
         isGameRunning = true;
@@ -810,7 +1097,11 @@ if (btnSaveUser && inUser) {
     if (!val) return;
     if (window.pywebview && window.pywebview.api) {
       const res = await window.pywebview.api.set_player_name(val);
-      showToast('Saved player: ' + val);
+      if (!res || !res.success) {
+        showToast((res && res.error) ? res.error : 'Invalid username (3-16 chars, A-Z, 0-9, _)', true);
+        return;
+      }
+      showToast('Saved player: ' + (res.username || val));
       if (res && res.avatar_url) {
         const headAvatar = document.getElementById('header-avatar-img');
         if (headAvatar) headAvatar.src = res.avatar_url;
@@ -829,12 +1120,39 @@ if (btnSaveUser && inUser) {
 }
 
 // ==========================================
-// VIEW 2: MOD MANAGER
+// VIEW 2: MOD, RESOURCE PACK & SHADER MANAGER
 // ==========================================
+let currentManagerTab = 'mods'; // 'mods' | 'resourcepacks' | 'shaderpacks'
+
+document.querySelectorAll('#mods-subtabs .mods-subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#mods-subtabs .mods-subtab-btn').forEach(b => {
+      b.className = 'btn btn-white mods-subtab-btn';
+    });
+    btn.className = 'btn btn-peri mods-subtab-btn';
+    currentManagerTab = btn.dataset.packtype || 'mods';
+    loadMods();
+  });
+});
+
 async function loadMods() {
   const container = document.getElementById('mods-list-container');
   const countPill = document.getElementById('mods-count-pill');
   if (!container) return;
+
+  if (currentManagerTab !== 'mods') {
+    container.innerHTML = `<div style="text-align: center; padding: 30px; font-weight: 700; color: var(--ink-muted);">Scanning ${currentManagerTab}...</div>`;
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_packs_list) {
+      try {
+        const res = await window.pywebview.api.get_packs_list(currentManagerTab, appState.active_version);
+        renderPacksList(res.packs || [], currentManagerTab);
+      } catch (e) {
+        container.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--pal-coral); font-weight: 800;">Error: ${e}</div>`;
+      }
+    }
+    return;
+  }
+
   container.innerHTML = '<div style="text-align: center; padding: 30px; font-weight: 700; color: var(--ink-muted);">Scanning mods for active version...</div>';
 
   if (window.pywebview && window.pywebview.api) {
@@ -946,10 +1264,68 @@ if (inModSearch) {
   });
 }
 
-// Open Mods Folder
+// Open Mods / Resourcepacks / Shaderpacks Folder
 const btnModsFolder = document.getElementById('btn-mods-open-folder');
 if (btnModsFolder) {
-  btnModsFolder.addEventListener('click', () => openFolder('mods'));
+  btnModsFolder.addEventListener('click', () => openFolder(currentManagerTab || 'mods'));
+}
+
+function renderPacksList(packs, packType) {
+  const container = document.getElementById('mods-list-container');
+  const countPill = document.getElementById('mods-count-pill');
+  if (!container) return;
+  const label = packType === 'shaderpacks' ? 'Shaders' : 'Resource Packs';
+  const enabledCount = packs.filter(p => p.enabled).length;
+  if (countPill) countPill.innerText = `${enabledCount} / ${packs.length} ${label}`;
+
+  container.innerHTML = '';
+  if (!packs.length) {
+    container.innerHTML = `<div style="text-align: center; padding: 40px; font-weight: 700; color: var(--ink-muted);">No ${label.toLowerCase()} found in this instance.</div>`;
+    return;
+  }
+  packs.forEach(p => {
+    const row = document.createElement('div');
+    row.className = `mod-item-row ${p.enabled ? '' : 'disabled'}`;
+    row.dataset.name = p.name.toLowerCase();
+    row.innerHTML = `
+      <div style="flex: 1; overflow: hidden;">
+        <div style="font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${p.name}</div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+          <span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-muted);">${p.filename}</span>
+          <span class="badge-tag" style="background: #ffffff; font-size: 0.70rem; padding: 1px 6px;">${p.is_dir ? 'Folder' : p.size_mb + ' MB'}</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+        <label class="tactile-switch" title="Enable / Disable">
+          <input type="checkbox" class="pack-toggle-cb" data-filename="${p.filename}" ${p.enabled ? 'checked' : ''}>
+          <span class="tactile-slider"></span>
+        </label>
+        <button class="btn btn-secondary btn-del-pack" data-filename="${p.filename}" style="padding: 6px 10px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    `;
+    row.querySelector('.pack-toggle-cb').addEventListener('change', async (e) => {
+      const res = await window.pywebview.api.toggle_pack(packType, e.target.dataset.filename, appState.active_version);
+      if (res && res.success) {
+        showToast('Toggled: ' + res.new_name);
+        loadMods();
+      } else {
+        showToast((res && res.error) || 'Failed to toggle pack', true);
+        e.target.checked = !e.target.checked;
+      }
+    });
+    row.querySelector('.btn-del-pack').addEventListener('click', async () => {
+      if (confirm(`Delete '${p.filename}' permanently?`)) {
+        const res = await window.pywebview.api.delete_pack(packType, p.filename, appState.active_version);
+        if (res && res.success) {
+          showToast('Deleted: ' + p.filename);
+          loadMods();
+        }
+      }
+    });
+    container.appendChild(row);
+  });
 }
 
 // Refresh Mods
@@ -1441,12 +1817,28 @@ if (btnCopyInvite) {
   btnCopyInvite.addEventListener('click', () => {
     const username = appState.config ? appState.config.username || 'Player' : 'Player';
     const ver = appState.active_version || '1.20.1';
-    const link = `moon://invite?user=${encodeURIComponent(username)}&version=${encodeURIComponent(ver)}`;
+    const moonId = appState.moon_id || (appState.config && appState.config.moon_id) || '';
+    const link = `moon://invite?id=${encodeURIComponent(moonId)}&user=${encodeURIComponent(username)}&version=${encodeURIComponent(ver)}`;
     navigator.clipboard.writeText(link).then(() => {
       showToast('Copied friend invite link: ' + link);
     }).catch(() => {
       showToast('Invite link: ' + link);
     });
+  });
+}
+
+// Open In-Game Mod Companion Hub
+const btnOpenCompanion = document.getElementById('btn-open-mod-companion');
+if (btnOpenCompanion) {
+  btnOpenCompanion.addEventListener('click', async () => {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_mod_companion) {
+      const res = await window.pywebview.api.open_mod_companion();
+      if (res && res.success) {
+        showToast('Opened In-Game Moon Companion Hub');
+      } else {
+        showToast((res && res.error) || 'Launch Minecraft first to open the In-Game Mod Hub', true);
+      }
+    }
   });
 }
 
@@ -1614,7 +2006,12 @@ if (btnSaveAllSet) {
       height: parseInt(document.getElementById('setting-height').value) || 720,
       fullscreen: document.getElementById('setting-fullscreen').checked,
       discord_rpc: document.getElementById('setting-discord-rpc').checked,
-      jvm_g1gc_preset: document.getElementById('setting-jvm-g1gc').checked
+      jvm_g1gc_preset: document.getElementById('setting-jvm-g1gc').checked,
+      hud_overlay: document.getElementById('setting-hud-overlay')?.checked !== false,
+      auto_backup_worlds: document.getElementById('setting-auto-backup')?.checked !== false,
+      cloud_api_url: (document.getElementById('setting-cloud-api-url')?.value || '').trim(),
+      supabase_url: (document.getElementById('setting-supabase-url')?.value || '').trim(),
+      supabase_key: (document.getElementById('setting-supabase-key')?.value || '').trim()
     };
 
     if (window.pywebview && window.pywebview.api) {
@@ -1625,6 +2022,112 @@ if (btnSaveAllSet) {
     } else {
       showToast('Settings saved');
     }
+  });
+}
+
+let qolWired = false;
+async function refreshQolControls() {
+  if (!window.pywebview?.api?.get_qol_state) return;
+  const qol = await window.pywebview.api.get_qol_state();
+  const ptBadge = document.getElementById('qol-playtime-badge');
+  if (ptBadge && qol.playtime) {
+    ptBadge.innerText = `Playtime: ${qol.playtime.instance_formatted || '0s'} (Total ${qol.playtime.total_all_formatted || '0s'})`;
+  }
+  const ovBtn = document.getElementById('btn-qol-overlay');
+  if (ovBtn && qol.overlay) {
+    ovBtn.innerText = qol.overlay.running ? 'Hide HUD Overlay [F8]' : 'Show HUD Overlay [F8]';
+  }
+  const gmBtn = document.getElementById('btn-qol-gamma');
+  if (gmBtn && qol.gamma) {
+    gmBtn.innerText = qol.gamma.enabled ? 'Fullbright: ON' : 'Fullbright: OFF';
+  }
+  if (window.pywebview?.api?.get_p2p_status) {
+    try {
+      const p2p = await window.pywebview.api.get_p2p_status();
+      const el = document.getElementById('gui-p2p-status');
+      if (el && p2p) {
+        if (p2p.host?.running) el.innerText = `Hosting ${p2p.host.room_code} • Port ${p2p.host.local_port} • Peers: ${p2p.host.connected_peers}`;
+        else if (p2p.peer?.running) el.innerText = `Connected (${p2p.peer.mode}) → ${p2p.peer.local_address}`;
+        else el.innerText = 'P2P Idle';
+      }
+    } catch (_) {}
+  }
+  if (qolWired) return;
+  qolWired = true;
+  document.getElementById('btn-gui-p2p-host')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.start_p2p_host(null, true);
+    showToast(r.success ? `P2P Room Ready: ${r.room_code}` : (r.error || 'P2P Host failed'));
+    refreshQolControls();
+  });
+  document.getElementById('btn-gui-p2p-stop')?.addEventListener('click', async () => {
+    await window.pywebview.api.stop_p2p();
+    showToast('P2P stopped');
+    refreshQolControls();
+  });
+  document.getElementById('btn-gui-p2p-join')?.addEventListener('click', async () => {
+    const t = (document.getElementById('input-gui-p2p-join')?.value || '').trim();
+    if (!t) return;
+    showToast('Hole-punching P2P to ' + t + '...');
+    const r = await window.pywebview.api.connect_p2p_peer(t);
+    showToast(r.success ? `Ready (${r.mode}): ${r.local_address} (added to Multiplayer list!)` : (r.error || 'P2P connect failed'));
+    refreshQolControls();
+  });
+  document.getElementById('btn-profile-push')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.push_cloud_profile();
+    showToast(r.success ? `Cloud Profile Pushed (${r.options_count} options, ${r.servers_count} servers)` : (r.error || 'Push failed'));
+  });
+  document.getElementById('btn-profile-pull')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.pull_cloud_profile();
+    showToast(r.success ? `Pulled ${r.updated_keys} options & ${r.added_servers} servers` : (r.error || 'Pull failed'));
+  });
+  document.getElementById('btn-mods-audit')?.addEventListener('click', async () => {
+    const box = document.getElementById('mods-audit-banner');
+    if (box) { box.style.display = 'block'; box.innerHTML = '<b>Scanning mod JAR metadata & Modrinth hashes...</b>'; }
+    const r = await window.pywebview.api.audit_instance_mods();
+    if (!box) return;
+    if (!r || !r.success) { box.innerHTML = `<b>Error:</b> ${r?.error || 'Audit failed'}`; return; }
+    const issues = r.issues || [];
+    const updates = r.updates || [];
+    let html = `<div style="font-weight:900;margin-bottom:6px;">Audit (${r.loader} ${r.mc_version}) • ${issues.length} Issue(s) • ${updates.length} Modrinth Update(s)</div>`;
+    if (issues.length) {
+      html += issues.map(i => `<div style="font-size:0.80rem;margin-bottom:4px;color:#b91c1c;"><b>[${i.type}]</b> ${i.mod}: ${i.detail}</div>`).join('');
+    }
+    if (updates.length) {
+      html += updates.map(u => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding:6px 8px;background:#ffffff;border:1.5px solid var(--ink-primary);border-radius:6px;">
+        <span style="font-size:0.80rem;"><b>${u.mod_name}</b> ${u.current_version} → <b>${u.new_version}</b></span>
+        <button class="btn btn-mint btn-apply-mod-upd" data-old="${u.file_name}" data-url="${u.download_url}" data-new="${u.new_filename}" data-sha="${u.sha512}" style="padding:3px 10px;font-size:0.74rem;">Update</button>
+      </div>`).join('');
+    }
+    if (!issues.length && !updates.length) html += '<div style="font-size:0.82rem;color:#047857;">All mods are compatible and up to date!</div>';
+    box.innerHTML = html;
+    box.querySelectorAll('.btn-apply-mod-upd').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; b.innerText = 'Updating...';
+      const ur = await window.pywebview.api.update_instance_mod(b.dataset.old, b.dataset.url, b.dataset.new, b.dataset.sha);
+      showToast(ur.success ? `Updated to ${ur.new_file}` : (ur.error || 'Update failed'));
+      if (ur.success) b.innerText = 'Updated!';
+    }));
+  });
+  document.getElementById('btn-qol-overlay')?.addEventListener('click', async () => {
+    await window.pywebview.api.toggle_hud_overlay();
+    refreshQolControls();
+  });
+  document.getElementById('btn-qol-borderless')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.toggle_borderless();
+    showToast(r.success ? (r.borderless ? 'Borderless Fullscreen ON' : 'Borderless OFF') : (r.error || 'No running Minecraft window'));
+  });
+  document.getElementById('btn-qol-gamma')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.toggle_gamma();
+    showToast(r.success ? `Fullbright Gamma: ${r.enabled ? 'ON (15.0)' : 'OFF (1.0)'}` : (r.error || 'Failed'));
+    refreshQolControls();
+  });
+  document.getElementById('btn-qol-backup')?.addEventListener('click', async () => {
+    const r = await window.pywebview.api.backup_worlds_now();
+    showToast(r.success ? (r.skipped ? r.reason : `World backup saved: ${r.file} (${r.size_kb} KB)`) : (r.error || 'Backup failed'));
+  });
+  document.getElementById('btn-qol-audio-apply')?.addEventListener('click', async () => {
+    const p = document.getElementById('qol-audio-preset')?.value || 'normal';
+    const r = await window.pywebview.api.set_audio_preset(p);
+    showToast(r.success ? `Audio: ${r.label}` : (r.error || 'Audio error'));
   });
 }
 
@@ -1700,6 +2203,10 @@ function openSkinModal() {
   }
   if (imgSkinPrev) {
     imgSkinPrev.src = appState.avatar_url || 'https://minotar.net/bust/Steve/128.png';
+  }
+  const selModel = document.getElementById('select-skin-model');
+  if (selModel) {
+    selModel.value = (appState.config && appState.config.skin_model) || 'auto';
   }
   stagedSkin = { type: 'none', data: '', filename: '' };
 }
@@ -1825,7 +2332,7 @@ function handleHtmlFile(file) {
 }
 
 // Fetch preview for manual URL or username input
-function updateManualPreview() {
+async function updateManualPreview() {
   const val = inSkin ? inSkin.value.trim() : '';
   if (!val) return;
   stagedSkin = {
@@ -1833,6 +2340,19 @@ function updateManualPreview() {
     data: val,
     filename: val
   };
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.preview_skin_input) {
+    if (lblSkinFile) lblSkinFile.innerText = 'Loading skin preview...';
+    try {
+      const res = await window.pywebview.api.preview_skin_input(val);
+      if (res && res.success && res.preview_url) {
+        if (imgSkinPrev) imgSkinPrev.src = res.preview_url;
+        if (lblSkinFile) lblSkinFile.innerText = val.startsWith('http') ? ('URL: ' + val.split('/').pop()) : ('Player: ' + val);
+        return;
+      } else if (res && res.error) {
+        if (lblSkinFile) lblSkinFile.innerText = res.error;
+      }
+    } catch (e) {}
+  }
   if (val.startsWith('http://') || val.startsWith('https://')) {
     if (imgSkinPrev) imgSkinPrev.src = val;
     if (lblSkinFile) lblSkinFile.innerText = 'URL: ' + val.split('/').pop();
@@ -1846,6 +2366,36 @@ if (btnFetchPrev) btnFetchPrev.addEventListener('click', updateManualPreview);
 if (inSkin) {
   inSkin.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') updateManualPreview();
+  });
+}
+
+// Skin Arm Model & Cape Controls
+const selSkinModel = document.getElementById('select-skin-model');
+if (selSkinModel) {
+  selSkinModel.addEventListener('change', async () => {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.set_skin_model) {
+      const res = await window.pywebview.api.set_skin_model(selSkinModel.value);
+      if (res && res.success) showToast(`Skin arm model set to: ${selSkinModel.value}`);
+    }
+  });
+}
+const btnChooseCape = document.getElementById('btn-choose-cape');
+if (btnChooseCape) {
+  btnChooseCape.addEventListener('click', async () => {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.choose_cape_file) {
+      const res = await window.pywebview.api.choose_cape_file();
+      if (res && res.success) showToast('Custom cape applied!');
+      else if (res && !res.cancelled) showToast(res.error || 'Failed to apply cape', true);
+    }
+  });
+}
+const btnResetCape = document.getElementById('btn-reset-cape');
+if (btnResetCape) {
+  btnResetCape.addEventListener('click', async () => {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.apply_cape) {
+      await window.pywebview.api.apply_cape('reset');
+      showToast('Custom cape cleared.');
+    }
   });
 }
 
@@ -1867,11 +2417,16 @@ if (btnSkinApply) {
 
     if (window.pywebview && window.pywebview.api) {
       try {
+        const skinModel = selSkinModel ? selSkinModel.value : 'auto';
         let res;
         if (stagedSkin.type === 'base64') {
-          res = await window.pywebview.api.apply_skin_data(stagedSkin.filename, stagedSkin.data);
+          res = await window.pywebview.api.apply_skin_data(stagedSkin.filename, stagedSkin.data, skinModel);
         } else {
-          res = await window.pywebview.api.apply_skin(stagedSkin.data);
+          res = await window.pywebview.api.apply_skin(stagedSkin.data, skinModel);
+        }
+        if (res && res.success === false) {
+          showToast(res.error || 'Failed to apply skin', true);
+          return;
         }
         showToast('Skin applied successfully & broadcast to LAN!');
         modalSkin.classList.remove('active');
@@ -2322,3 +2877,172 @@ function closeJavaDownloadModal() {
   const modal = document.getElementById('modal-java-download');
   if (modal) modal.classList.remove('active');
 }
+
+// ==============================================================================
+// 1-CLICK PORTABLE JAVA INSTALLER, MICROSOFT ACCOUNT & CREATE INSTANCE MODALS
+// ==============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // 1-Click Portable Java Install
+  const btnJavaAuto = document.getElementById('btn-java-auto-install');
+  if (btnJavaAuto) {
+    btnJavaAuto.addEventListener('click', async () => {
+      const reqJ = (currentJavaRecommendation && currentJavaRecommendation.required_version) || 21;
+      closeJavaDownloadModal();
+      openInstallProgressModal(`Java ${reqJ} LTS (Temurin)`, 'runtime');
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.install_java_runtime) {
+        await window.pywebview.api.install_java_runtime(reqJ);
+      }
+    });
+  }
+
+  // Account Switcher & Microsoft Login Modal
+  const modalAccounts = document.getElementById('modal-accounts');
+  const btnOpenAccounts = document.getElementById('btn-open-account-modal');
+  const closeAccounts = () => modalAccounts && modalAccounts.classList.remove('active');
+
+  async function renderAccountsList() {
+    const listEl = document.getElementById('accounts-list-container');
+    if (!listEl || !window.pywebview || !window.pywebview.api || !window.pywebview.api.get_accounts) return;
+    const res = await window.pywebview.api.get_accounts();
+    const accs = res.accounts || [];
+    listEl.innerHTML = '';
+    if (!accs.length) {
+      listEl.innerHTML = '<div style="text-align: center; padding: 14px; font-size: 0.84rem; color: var(--ink-muted); font-weight: 700;">No Microsoft accounts saved yet.</div>';
+      return;
+    }
+    accs.forEach(a => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 2px solid var(--ink-primary); border-radius: 8px; background: ' + (a.active ? 'var(--pal-mint)' : '#fff') + ';';
+      row.innerHTML = `
+        <div>
+          <div style="font-weight: 900; font-size: 0.94rem;">${a.username} ${a.active ? '<span class="badge-tag" style="background:#fff; font-size:0.68rem;">ACTIVE</span>' : ''}</div>
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-secondary);">Microsoft • ${a.uuid}</div>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          ${!a.active ? `<button class="btn btn-primary btn-acc-use" data-id="${a.id}" style="padding: 5px 10px; font-size: 0.78rem;">Use</button>` : ''}
+          <button class="btn btn-secondary btn-acc-del" data-id="${a.id}" style="padding: 5px 10px; font-size: 0.78rem;">Remove</button>
+        </div>
+      `;
+      const useBtn = row.querySelector('.btn-acc-use');
+      if (useBtn) {
+        useBtn.addEventListener('click', async () => {
+          await window.pywebview.api.switch_account(a.id);
+          const state = await window.pywebview.api.get_launcher_state();
+          applyLauncherState(state);
+          renderAccountsList();
+          showToast('Switched account to ' + a.username);
+        });
+      }
+      row.querySelector('.btn-acc-del').addEventListener('click', async () => {
+        await window.pywebview.api.logout_account(a.id);
+        const state = await window.pywebview.api.get_launcher_state();
+        applyLauncherState(state);
+        renderAccountsList();
+        showToast('Removed account ' + a.username);
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  if (btnOpenAccounts) {
+    btnOpenAccounts.addEventListener('click', () => {
+      if (modalAccounts) modalAccounts.classList.add('active');
+      renderAccountsList();
+    });
+  }
+  const btnCloseAcc = document.getElementById('btn-close-account-modal');
+  if (btnCloseAcc) btnCloseAcc.addEventListener('click', closeAccounts);
+  const btnCloseAccFtr = document.getElementById('btn-close-account-footer');
+  if (btnCloseAccFtr) btnCloseAccFtr.addEventListener('click', closeAccounts);
+
+  const btnMsLogin = document.getElementById('btn-ms-login-popup');
+  const btnMsLoginTxt = document.getElementById('btn-ms-login-text');
+  if (btnMsLogin) {
+    btnMsLogin.addEventListener('click', async () => {
+      if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.login_microsoft) return;
+      btnMsLogin.disabled = true;
+      if (btnMsLoginTxt) btnMsLoginTxt.innerText = 'Waiting for Microsoft Sign-In...';
+      try {
+        const res = await window.pywebview.api.login_microsoft();
+        if (res && res.success) {
+          showToast('Signed in as ' + res.account.username + '!');
+          const state = await window.pywebview.api.get_launcher_state();
+          applyLauncherState(state);
+          renderAccountsList();
+          closeAccounts();
+        } else if (res && !res.cancelled) {
+          showToast(res.error || 'Microsoft login failed', true);
+        }
+      } catch (e) {
+        showToast('Microsoft login error: ' + e, true);
+      } finally {
+        btnMsLogin.disabled = false;
+        if (btnMsLoginTxt) btnMsLoginTxt.innerText = 'Sign in with Microsoft';
+      }
+    });
+  }
+
+  const btnSwitchOffline = document.getElementById('btn-switch-offline-mode');
+  if (btnSwitchOffline) {
+    btnSwitchOffline.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.switch_account) {
+        await window.pywebview.api.switch_account('offline');
+        const state = await window.pywebview.api.get_launcher_state();
+        applyLauncherState(state);
+        renderAccountsList();
+        closeAccounts();
+        showToast('Switched to Offline Account mode');
+      }
+    });
+  }
+
+  // Create Instance & Import Local Modpack
+  const modalCreateInst = document.getElementById('modal-create-instance');
+  const btnOpenCreate = document.getElementById('btn-open-create-instance');
+  const closeCreate = () => modalCreateInst && modalCreateInst.classList.remove('active');
+  if (btnOpenCreate) btnOpenCreate.addEventListener('click', () => modalCreateInst && modalCreateInst.classList.add('active'));
+  const btnCloseCreate = document.getElementById('btn-close-create-instance');
+  if (btnCloseCreate) btnCloseCreate.addEventListener('click', closeCreate);
+  const btnCancelCreate = document.getElementById('btn-cancel-create-instance');
+  if (btnCancelCreate) btnCancelCreate.addEventListener('click', closeCreate);
+
+  const selNewMcVer = document.getElementById('select-new-mc-version');
+  const customMcWrap = document.getElementById('custom-mc-version-wrap');
+  if (selNewMcVer && customMcWrap) {
+    selNewMcVer.addEventListener('change', () => {
+      customMcWrap.style.display = selNewMcVer.value === 'custom' ? 'block' : 'none';
+    });
+  }
+
+  const btnSubmitCreate = document.getElementById('btn-submit-create-instance');
+  if (btnSubmitCreate) {
+    btnSubmitCreate.addEventListener('click', async () => {
+      const ldr = (document.getElementById('select-new-loader') || {}).value || 'fabric';
+      let mcV = (selNewMcVer && selNewMcVer.value) || '1.21.1';
+      if (mcV === 'custom') {
+        mcV = ((document.getElementById('input-custom-mc-version') || {}).value || '').trim();
+        if (!mcV) {
+          showToast('Enter a valid Minecraft version', true);
+          return;
+        }
+      }
+      closeCreate();
+      openInstallProgressModal(`${ldr.toUpperCase()} ${mcV}`, 'modpack');
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.create_instance) {
+        await window.pywebview.api.create_instance(ldr, mcV);
+      }
+    });
+  }
+
+  const btnImportLocal = document.getElementById('btn-import-local-pack');
+  if (btnImportLocal) {
+    btnImportLocal.addEventListener('click', async () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.import_local_modpack) {
+        const res = await window.pywebview.api.import_local_modpack();
+        if (res && res.success) {
+          openInstallProgressModal(res.filename || 'Local Modpack', 'modpack');
+        }
+      }
+    });
+  }
+});

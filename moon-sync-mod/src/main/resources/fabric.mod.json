@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "moonsync",
+  "version": "1.0.0",
+  "name": "Moon Client Companion",
+  "description": "Moon Launcher universal client mod: Moon ID friends, Supabase presence, multiplayer host/join, mod sync, screenshots & waypoints.",
+  "authors": ["Moon Launcher"],
+  "contact": {
+    "homepage": "https://github.com/JustMichellee/Moon-Launcher",
+    "sources": "https://github.com/JustMichellee/Moon-Launcher"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.moonlauncher.sync.fabric.MoonSyncFabricEntrypoint"
+    ]
+  },
+  "depends": {
+    "java": ">=8"
+  }
+}
+

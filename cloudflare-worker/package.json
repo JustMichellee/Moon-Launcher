@@ -1,0 +1,15 @@
+{
+  "name": "moon-launcher-cloud",
+  "version": "2.5.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test_worker.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
+

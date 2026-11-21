@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.moonlauncher.ingame.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "MinecraftMixin",
+    "ScreenAccessor",
+    "PauseScreenMixin",
+    "JoinMultiplayerScreenMixin",
+    "KeyboardHandlerMixin",
+    "MouseHandlerMixin",
+    "EntityMixin",
+    "CameraMixin",
+    "GameRendererMixin",
+    "GuiMixin",
+    "LightTextureMixin",
+    "ChatComponentMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
+

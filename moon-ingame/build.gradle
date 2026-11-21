@@ -1,0 +1,36 @@
+plugins {
+    id 'fabric-loom' apply false
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    version = rootProject.mod_version
+    group = rootProject.maven_group
+
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.fabricmc.net/' }
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += rootProject.file('common/src/main/java')
+            resources.srcDirs += rootProject.file('common/src/main/resources')
+        }
+    }
+
+    afterEvaluate {
+        processResources {
+            def mcRange = project.findProperty("mc_range") ?: ">=1.20"
+            inputs.property "version", project.version
+            inputs.property "mc_range", mcRange
+            filesMatching("fabric.mod.json") {
+                expand(
+                    "version": project.version,
+                    "mc_range": mcRange
+                )
+            }
+        }
+    }
+}

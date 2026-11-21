@@ -1,0 +1,9 @@
+name = "moon-launcher-cloud"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "moon_launcher_db"
+database_id = "d2dd0367-b39c-40dc-a1e6-7da45284af7f"
+

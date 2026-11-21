@@ -1,0 +1,13 @@
+[
+  {
+    "modid": "moonsync",
+    "name": "Moon Client Companion",
+    "description": "Moon Launcher universal client mod: Moon ID friends, Supabase presence, multiplayer host/join, mod sync, screenshots & waypoints.",
+    "version": "1.0.0",
+    "mcversion": "",
+    "url": "https://github.com/JustMichellee/Moon-Launcher",
+    "authorList": ["Moon Launcher"],
+    "clientSideOnly": true
+  }
+]
+

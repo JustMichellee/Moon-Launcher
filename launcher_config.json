@@ -2,13 +2,11 @@
   "username": "Player",
   "version_name": "",
   "ram_max_gb": 4,
-  "ram_min_gb": 2,
+  "ram_min_gb": 1,
   "width": 1280,
   "height": 720,
   "fullscreen": false,
   "discord_rpc": true,
-  "jvm_g1gc_preset": true,
-  "moon_id": "MOON-1001",
-  "supabase_url": "https://fcozsefkufbvztgniuwk.supabase.co",
-  "supabase_key": "sb_publishable_4NvjQ6A6TS9fBAFQpjWyaA_WjgP8BuZ"
+  "jvm_g1gc_preset": true
 }
+

@@ -158,13 +158,16 @@
                 <img src="https://minotar.net/bust/Steve/128.png" id="dash-avatar-bust" alt="3D Player Bust" style="width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated;">
               </div>
               <div style="flex: 1; overflow: hidden;">
-                <span class="badge-tag" style="background: #ffffff; margin-bottom: 4px;">PLAYER IDENTITY</span>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;">
+                  <span class="badge-tag" style="background: #ffffff;">PLAYER IDENTITY</span>
+                  <span class="badge-tag" id="dash-auth-mode-badge" style="background: var(--pal-cream); font-size: 0.70rem;">OFFLINE</span>
+                </div>
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
                   <div style="font-size: 1.25rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="dash-username-display">Player</div>
                   <span class="badge-tag" id="dash-moon-id-badge" style="background: var(--pal-mint); font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer; padding: 2px 7px;" title="Click to copy your Moon ID">MOON-4821</span>
                 </div>
                 <div style="display: flex; gap: 6px;">
-                  <input type="text" id="input-quick-username" class="tactile-input" placeholder="New username..." style="padding: 6px 10px; font-size: 0.86rem;">
+                  <input type="text" id="input-quick-username" class="tactile-input" placeholder="Username (3-16 chars)..." maxlength="16" style="padding: 6px 10px; font-size: 0.86rem;">
                   <button class="btn btn-primary" id="btn-save-username" style="padding: 6px 12px; font-size: 0.84rem; flex-shrink: 0;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     <span>Save</span>
@@ -172,10 +175,16 @@
                 </div>
               </div>
             </div>
-            <button class="btn btn-white" id="btn-open-skin-modal" style="margin-top: 14px; padding: 8px 12px; font-size: 0.84rem; width: 100%;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <span>Customize Skin & Cape</span>
-            </button>
+            <div style="display: flex; gap: 8px; margin-top: 14px;">
+              <button class="btn btn-white" id="btn-open-skin-modal" style="flex: 1; padding: 8px 10px; font-size: 0.82rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Skin & Cape</span>
+              </button>
+              <button class="btn btn-mint" id="btn-open-account-modal" style="flex: 1; padding: 8px 10px; font-size: 0.82rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="9" height="9" x="3" y="3"/><rect width="9" height="9" x="12" y="3"/><rect width="9" height="9" x="3" y="12"/><rect width="9" height="9" x="12" y="12"/></svg>
+                <span id="btn-account-label">Microsoft Login</span>
+              </button>
+            </div>
           </div>
 
           <!-- Quick RAM Allocator -->
@@ -203,11 +212,19 @@
             <p style="font-size: 0.86rem; color: var(--ink-secondary); font-weight: 600;">Switch active version, launch directly, inspect folders, or delete unused instances to reclaim disk space.</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="btn-open-create-instance" title="Install Minecraft Vanilla, Fabric, Forge, NeoForge, or Quilt" style="padding: 7px 12px; font-size: 0.82rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+              <span>Create Instance</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-import-local-pack" title="Import local .mrpack or .zip modpack archive" style="padding: 7px 12px; font-size: 0.82rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span>Import .mrpack/.zip</span>
+            </button>
             <button class="btn btn-mint" id="btn-open-share-modal" title="Bagi modpack ke teman via kode online" style="padding: 7px 12px; font-size: 0.82rem;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
               <span>Share Modpack</span>
             </button>
-            <button class="btn btn-primary" id="btn-open-import-modal" title="Terima modpack teman menggunakan kode MOON-PACK-XXXX" style="padding: 7px 12px; font-size: 0.82rem;">
+            <button class="btn btn-white" id="btn-open-import-modal" title="Terima modpack teman menggunakan kode MOON-PACK-XXXX" style="padding: 7px 12px; font-size: 0.82rem;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
               <span>Terima Modpack (Code)</span>
             </button>
@@ -242,12 +259,23 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
               <span>Refresh Mods</span>
             </button>
+            <button class="btn btn-primary" id="btn-mods-audit" title="Check Loader Compatibility & Modrinth Updates">
+              <span>Check Updates & Compat</span>
+            </button>
           </div>
+        </div>
+        <div id="mods-audit-banner" style="display: none; margin-bottom: 14px; padding: 12px; background: #fffbeb; border: 2px solid var(--ink-primary); border-radius: 10px;"></div>
+
+        <!-- Sub-tabs: Mods | Resource Packs | Shader Packs -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;" id="mods-subtabs">
+          <button class="btn btn-peri mods-subtab-btn" data-packtype="mods" style="padding: 7px 14px; font-size: 0.84rem;">Mods</button>
+          <button class="btn btn-white mods-subtab-btn" data-packtype="resourcepacks" style="padding: 7px 14px; font-size: 0.84rem;">Resource Packs</button>
+          <button class="btn btn-white mods-subtab-btn" data-packtype="shaderpacks" style="padding: 7px 14px; font-size: 0.84rem;">Shader Packs</button>
         </div>
 
         <!-- Search & Filter Bar -->
         <div style="display: flex; gap: 12px; align-items: center;">
-          <input type="text" id="input-mod-search" class="tactile-input" placeholder="Search mods by name (e.g. Sodium, Create, JEI, Iris, Ferrite)...">
+          <input type="text" id="input-mod-search" class="tactile-input" placeholder="Search items by name (e.g. Sodium, Create, Complementary, JEI)...">
           <span class="badge-tag" id="mods-count-pill" style="background: var(--pal-mint); font-size: 0.85rem; padding: 10px 14px; flex-shrink: 0;">0 Mods</span>
         </div>
       </div>
@@ -394,30 +422,67 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
               <span>Open Host World & Tunnel Studio</span>
             </button>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 2px dashed rgba(15,23,42,0.2);">
+              <div style="font-size: 0.78rem; font-weight: 900; text-transform: uppercase; margin-bottom: 6px;">Direct P2P UDP Hole-Punching (STUN + Relay Fallback)</div>
+              <div id="gui-p2p-status" style="font-size: 0.78rem; font-weight: 700; margin-bottom: 8px;">P2P Idle</div>
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <button class="btn btn-mint" id="btn-gui-p2p-host" style="flex: 1; padding: 7px 10px; font-size: 0.78rem;">Host P2P Room</button>
+                <button class="btn btn-secondary" id="btn-gui-p2p-stop" style="padding: 7px 10px; font-size: 0.78rem;">Stop</button>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="input-gui-p2p-join" class="tactile-input" placeholder="MOON-P2P-XXXX or Moon ID..." style="padding: 6px 8px; font-size: 0.78rem;">
+                <button class="btn btn-primary" id="btn-gui-p2p-join" style="padding: 6px 12px; font-size: 0.78rem;">Join P2P</button>
+              </div>
+            </div>
           </div>
 
           <!-- Cloud Presence & Friends -->
           <div class="card-panel">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px;">
               <h3 style="font-size: 1.2rem; font-weight: 900;">Cloud Presence & Friends</h3>
+              <span class="badge-tag" id="friends-cloud-badge" style="background: var(--pal-cream); font-size: 0.70rem;">CLOUD DB</span>
             </div>
-            <p style="font-size: 0.86rem; color: var(--ink-secondary); font-weight: 600; margin-bottom: 16px;">
-              Share your direct launcher invite link with friends to auto-connect to your sessions.
+            <p style="font-size: 0.86rem; color: var(--ink-secondary); font-weight: 600; margin-bottom: 12px;">
+              Connect via Moon ID (MOON-XXXX) in Launcher & In-Game Companion Mod, or copy your invite link.
             </p>
 
-            <button class="btn btn-secondary" id="btn-copy-invite-link" style="width: 100%; margin-bottom: 16px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-              <span>Copy Moon Invite Link</span>
-            </button>
+            <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+              <button class="btn btn-secondary" id="btn-copy-invite-link" style="flex: 1;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>Copy Invite Link</span>
+              </button>
+              <button class="btn btn-primary" id="btn-open-mod-companion" style="flex: 1;">
+                <span>In-Game Mod Hub</span>
+              </button>
+            </div>
 
             <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-              <input type="text" id="input-friend-add" class="tactile-input" placeholder="Add friend username...">
+              <input type="text" id="input-friend-add" class="tactile-input" placeholder="Moon ID (MOON-XXXX) or username...">
               <button class="btn btn-primary" id="btn-friend-add">
                 <span>Add</span>
               </button>
             </div>
+            <div id="friends-requests-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
             <div id="friends-presence-list" style="display: flex; flex-direction: column; gap: 8px;">
               <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- Party / Squad & Cross-Server Chat -->
+          <div class="card-panel">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px;">
+              <h3 style="font-size: 1.15rem; font-weight: 900;">Party / Squad & Quick Chat</h3>
+              <button class="btn btn-secondary" id="btn-sync-whitelist" style="padding: 4px 10px; font-size: 0.72rem;" title="Sync accepted friends to active instance whitelist.json">Sync Whitelist</button>
+            </div>
+            <div id="party-squad-box" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;"></div>
+            <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+              <select id="gui-chat-target" class="tactile-input" style="font-size: 0.80rem; padding: 6px 8px;"></select>
+              <button class="btn btn-secondary" id="btn-gui-chat-refresh" style="padding: 6px 10px; font-size: 0.78rem;">Refresh</button>
+            </div>
+            <div id="gui-chat-feed" style="max-height: 150px; overflow-y: auto; background: #ffffff; border: 2px solid var(--ink-primary); border-radius: 8px; padding: 8px; margin-bottom: 8px; font-size: 0.78rem;"></div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="gui-chat-input" class="tactile-input" placeholder="Whisper friend or chat party..." style="padding: 7px 10px; font-size: 0.82rem;">
+              <button class="btn btn-primary" id="btn-gui-chat-send" style="padding: 7px 14px; font-size: 0.82rem;">Send</button>
             </div>
           </div>
 
@@ -544,14 +609,64 @@
               <input type="checkbox" id="setting-fullscreen" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
               <span>Start Game in Fullscreen Mode</span>
             </label>
-            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
-              <input type="checkbox" id="setting-discord-rpc" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
-              <span>Enable Discord Rich Presence (RPC)</span>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <span style="display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="setting-discord-rpc" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+                <span>Enable Discord Rich Presence (RPC)</span>
+              </span>
+              <span class="badge-tag" id="rpc-status-badge" style="background: var(--pal-cream); font-size: 0.72rem;">Checking...</span>
             </label>
             <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
               <input type="checkbox" id="setting-jvm-g1gc" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
               <span>High-Performance JVM G1GC Flags Preset</span>
             </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <input type="checkbox" id="setting-hud-overlay" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+              <span>Auto-Start Windows HUD Overlay (F8 Toggle)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.90rem; cursor: pointer;">
+              <input type="checkbox" id="setting-auto-backup" style="width: 18px; height: 18px; accent-color: var(--pal-coral);">
+              <span>Auto-Backup World Saves on Game Exit (Max 4)</span>
+            </label>
+          </div>
+
+          <!-- Phase 2 Client QoL & Controls -->
+          <div style="margin-bottom: 18px; padding: 12px; background: #ffffff; border: 2px solid var(--ink-primary); border-radius: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+              <span style="font-size: 0.80rem; font-weight: 900; text-transform: uppercase;">Client QoL, Audio & World Protection</span>
+              <span class="badge-tag" id="qol-playtime-badge" style="background: var(--pal-mint); font-size: 0.70rem;">Playtime: 0s</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+              <button class="btn btn-secondary" id="btn-qol-overlay" style="padding: 7px 10px; font-size: 0.78rem;">Toggle HUD Overlay [F8]</button>
+              <button class="btn btn-secondary" id="btn-qol-borderless" style="padding: 7px 10px; font-size: 0.78rem;">Borderless Window</button>
+              <button class="btn btn-secondary" id="btn-qol-gamma" style="padding: 7px 10px; font-size: 0.78rem;">Toggle Fullbright</button>
+              <button class="btn btn-mint" id="btn-qol-backup" style="padding: 7px 10px; font-size: 0.78rem;">Backup Worlds Now</button>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span style="font-size: 0.78rem; font-weight: 800; white-space: nowrap;">Audio Preset:</span>
+              <select id="qol-audio-preset" class="tactile-input" style="padding: 6px 8px; font-size: 0.78rem;">
+                <option value="normal">Normal (MC 100% / Music 100%)</option>
+                <option value="pvp_focus">PvP Focus (MC 100% / Music 15%)</option>
+                <option value="chill">Chill (MC 45% / Music 90%)</option>
+                <option value="mute_game">Mute Game (MC 0%)</option>
+              </select>
+              <button class="btn btn-primary" id="btn-qol-audio-apply" style="padding: 6px 12px; font-size: 0.78rem;">Apply</button>
+            </div>
+          </div>
+
+          <!-- Cloud Database (Cloudflare Workers + D1) -->
+          <div style="margin-bottom: 18px; padding: 12px; background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 10px;">
+            <div style="font-size: 0.80rem; font-weight: 900; text-transform: uppercase; margin-bottom: 8px;">Cloud Database (Cloudflare D1 / Moon ID Sync)</div>
+            <input type="text" id="setting-cloud-api-url" class="tactile-input" placeholder="Cloudflare Worker URL (https://moon-launcher-cloud....workers.dev)" style="margin-bottom: 8px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <button class="btn btn-secondary" id="btn-profile-push" style="flex: 1; padding: 7px 10px; font-size: 0.78rem;">Push Keybinds & Servers</button>
+              <button class="btn btn-mint" id="btn-profile-pull" style="flex: 1; padding: 7px 10px; font-size: 0.78rem;">Pull from Cloud</button>
+            </div>
+            <details style="font-size: 0.78rem;">
+              <summary style="cursor: pointer; font-weight: 800; color: var(--ink-muted); margin-bottom: 6px;">Optional Legacy Supabase Override</summary>
+              <input type="text" id="setting-supabase-url" class="tactile-input" placeholder="Supabase URL (https://xxx.supabase.co)" style="margin-bottom: 8px;">
+              <input type="text" id="setting-supabase-key" class="tactile-input" placeholder="Supabase Anon / Publishable Key">
+            </details>
           </div>
 
           <!-- Save Button -->
@@ -606,7 +721,7 @@
           <div class="card-panel-mint">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <h3 style="font-size: 1.25rem; font-weight: 900;">Moon Launcher Updater</h3>
-              <span class="badge-tag" style="background: #ffffff;" id="updater-local-ver">v2.4.5</span>
+              <span class="badge-tag" style="background: #ffffff;" id="updater-local-ver">v2.5.1</span>
             </div>
             <p style="font-size: 0.88rem; font-weight: 600; margin-bottom: 14px; line-height: 1.5;">
               Keep Moon Launcher up to date with the latest engine patches, security fixes, and game modpack optimizers.
@@ -666,11 +781,30 @@
       </div>
 
       <!-- Alternative: URL or Player Name -->
-      <div style="margin-bottom: 20px;">
+      <div style="margin-bottom: 14px;">
         <label style="display: block; font-size: 0.82rem; font-weight: 800; margin-bottom: 4px; color: var(--ink-secondary);">Or Load Texture from Online Account / Direct Skin URL:</label>
         <div style="display: flex; gap: 8px;">
           <input type="text" id="modal-skin-input" class="tactile-input" placeholder="e.g. Dream, Technoblade, or https://...png" style="font-size: 0.86rem; padding: 8px 12px;">
           <button class="btn btn-secondary" id="btn-fetch-skin-preview" style="padding: 8px 14px; font-size: 0.82rem;">Preview</button>
+        </div>
+      </div>
+
+      <!-- Skin Model & Custom Cape -->
+      <div style="display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; margin-bottom: 18px; padding: 12px; background: var(--pal-cream); border: 2px solid var(--ink-primary); border-radius: 8px;">
+        <div>
+          <label for="select-skin-model" style="display: block; font-size: 0.78rem; font-weight: 800; margin-bottom: 4px; color: var(--ink-secondary);">Skin Arm Model:</label>
+          <select id="select-skin-model" class="tactile-select" style="padding: 6px 10px; font-size: 0.84rem;">
+            <option value="auto">Auto Detect</option>
+            <option value="classic">Classic (Steve 4px)</option>
+            <option value="slim">Slim (Alex 3px)</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; margin-bottom: 4px; color: var(--ink-secondary);">Custom Cape (.png):</label>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-white" id="btn-choose-cape" type="button" style="flex: 1; padding: 6px 10px; font-size: 0.80rem;">Select Cape...</button>
+            <button class="btn btn-secondary" id="btn-reset-cape" type="button" style="padding: 6px 10px; font-size: 0.80rem;">Clear</button>
+          </div>
         </div>
       </div>
 
@@ -905,8 +1039,13 @@
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
-        <button class="btn btn-primary" id="btn-java-download-msi" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem;">
+        <button class="btn btn-mint" id="btn-java-auto-install" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <span id="modal-java-auto-btn-text">1-Click Install Portable Java (Auto)</span>
+        </button>
+
+        <button class="btn btn-primary" id="btn-java-download-msi" style="width: 100%; justify-content: center; padding: 10px; font-size: 0.88rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           <span id="modal-java-btn-text">Download Eclipse Temurin Java 17 LTS (MSI)</span>
         </button>
 
@@ -920,6 +1059,85 @@
             <span>Halaman Download Web</span>
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MICROSOFT ACCOUNT & ACCOUNT SWITCHER -->
+  <div class="modal-backdrop" id="modal-accounts">
+    <div class="modal-box" style="max-width: 540px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-mint); margin-bottom: 6px;">ACCOUNTS & AUTH</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Minecraft Account Manager</h3>
+          <p style="font-size: 0.82rem; color: var(--ink-secondary); font-weight: 600;">Sign in with your Microsoft Account for official online servers, or switch to Offline mode anytime.</p>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-account-modal" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <button class="btn btn-primary" id="btn-ms-login-popup" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem; margin-bottom: 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect width="9" height="9" x="3" y="3"/><rect width="9" height="9" x="12" y="3"/><rect width="9" height="9" x="3" y="12"/><rect width="9" height="9" x="12" y="12"/></svg>
+        <span id="btn-ms-login-text">Sign in with Microsoft</span>
+      </button>
+
+      <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 8px;">Saved Accounts:</div>
+      <div id="accounts-list-container" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 220px; overflow-y: auto;">
+        <!-- Populated by JS -->
+      </div>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px; border-top: 2px solid var(--ink-primary); padding-top: 12px;">
+        <button class="btn btn-white" id="btn-switch-offline-mode" style="flex: 1; justify-content: center;">Use Offline Account</button>
+        <button class="btn btn-secondary" id="btn-close-account-footer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE NEW MINECRAFT INSTANCE -->
+  <div class="modal-backdrop" id="modal-create-instance">
+    <div class="modal-box" style="max-width: 520px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <span class="badge-tag" style="background: var(--pal-peri); margin-bottom: 6px;">INSTANCE CREATOR</span>
+          <h3 style="font-size: 1.35rem; font-weight: 900;">Create New Instance</h3>
+          <p style="font-size: 0.82rem; color: var(--ink-secondary); font-weight: 600;">Install Vanilla or Mod Loader with Moon Sync pre-installed automatically.</p>
+        </div>
+        <button class="btn btn-secondary" id="btn-close-create-instance" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px;">
+        <div>
+          <label for="select-new-loader" style="display: block; font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;">Mod Loader:</label>
+          <select id="select-new-loader" class="tactile-select">
+            <option value="fabric">Fabric (Recommended • Fast & Lightweight)</option>
+            <option value="forge">Forge (Classic & Large Modpacks)</option>
+            <option value="neoforge">NeoForge (Modern 1.20.2 - 1.21+)</option>
+            <option value="quilt">Quilt (Fabric-Compatible)</option>
+            <option value="vanilla">Vanilla (Official Unmodded)</option>
+          </select>
+        </div>
+        <div>
+          <label for="select-new-mc-version" style="display: block; font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;">Minecraft Version (Popular First):</label>
+          <select id="select-new-mc-version" class="tactile-select">
+            <option value="1.21.1">1.21.1 (Popular Modern)</option>
+            <option value="1.20.1">1.20.1 (Most Popular Modded)</option>
+            <option value="1.21.4">1.21.4 (Latest 1.21)</option>
+            <option value="1.20.4">1.20.4</option>
+            <option value="1.19.2">1.19.2</option>
+            <option value="1.18.2">1.18.2</option>
+            <option value="1.16.5">1.16.5 (Classic)</option>
+            <option value="1.12.2">1.12.2 (Legacy Forge)</option>
+            <option value="custom">Custom Version...</option>
+          </select>
+        </div>
+        <div id="custom-mc-version-wrap" style="display: none;">
+          <label for="input-custom-mc-version" style="display: block; font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;">Custom Version String:</label>
+          <input type="text" id="input-custom-mc-version" class="tactile-input" placeholder="e.g. 1.21.3 or 1.8.9">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn btn-secondary" id="btn-cancel-create-instance">Cancel</button>
+        <button class="btn btn-primary" id="btn-submit-create-instance">Install Instance</button>
       </div>
     </div>
   </div>

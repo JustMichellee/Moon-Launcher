@@ -1,0 +1,8 @@
+# Runtime dependencies for Moon Launcher GUI & CLI
+pywebview>=5.0.0
+pillow>=10.0.0
+psutil>=5.9.0
+
+# Build / packaging dependencies (optional for source execution)
+pyinstaller>=6.0.0
+
